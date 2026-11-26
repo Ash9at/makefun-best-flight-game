@@ -84,6 +84,11 @@ export class Aircraft {
     const burning = this.fuel > 0;
     if (burning && !this.onGround) this.fuel = Math.max(0, this.fuel - dt * (0.14 + this.throttle * 0.30));
     const power = burning ? this.throttle : 0;
+    // Past 40 points of damage the airframe itself flies worse: drag
+    // up, controls softer, the wing gives up earlier. A firm arrival
+    // early in a sortie is a decision the rest of it is flown with.
+    const wear = Math.max(0, this.damage - 40);
+    const stallSpeed = STALL_SPEED * (1 + 0.002 * wear);
 
     // Roll toward the commanded bank; the bank does the turning.
     const targetRoll = input.roll * 1.05;
@@ -92,7 +97,7 @@ export class Aircraft {
     if (!this.onGround) this.yaw += turnRate * dt;
 
     // Pitch answers the stick, slower when the air is thin and fast.
-    const pitchAuth = clamp(this.speed / 45, 0.35, 1);
+    const pitchAuth = clamp(this.speed / 45, 0.35, 1) * (1 - 0.002 * wear);
     this.pitch += input.pitch * 0.85 * pitchAuth * dt;
     // A light weathervane: pitch settles a touch toward the horizon.
     this.pitch -= this.pitch * 0.10 * dt;
@@ -100,16 +105,19 @@ export class Aircraft {
     if (input.rudder && !this.onGround) this.yaw += input.rudder * 0.25 * dt;
 
     // Speed: thrust against drag, trading height for pace on the slope.
+    // A banked wing pays induced drag, so hard turns bleed speed and a
+    // gate line flown sloppily arrives at the low rings slow.
     const thrust = power * 13.5;
-    const drag = 0.0038 * this.speed * this.speed + (this.onGround ? 2.2 : 0);
+    const turnDrag = this.onGround ? 0 : 0.0022 * Math.sin(this.roll) * Math.sin(this.roll);
+    const drag = (0.0038 + turnDrag) * (1 + 0.003 * wear) * this.speed * this.speed + (this.onGround ? 2.2 : 0);
     let accel = thrust - drag - 9.81 * Math.sin(this.pitch);
     if (this.onGround && power === 0) accel -= 3.0; // brakes and grass
     this.speed = Math.max(0, this.speed + accel * dt);
 
     // The stall: too slow and the wing stops holding the nose up.
-    this.stalled = !this.onGround && this.speed < STALL_SPEED;
+    this.stalled = !this.onGround && this.speed < stallSpeed;
     if (this.stalled) {
-      this.pitch -= (STALL_SPEED - this.speed) * 0.045 * dt * 10;
+      this.pitch -= (stallSpeed - this.speed) * 0.045 * dt * 10;
       this.buffet = Math.min(1, this.buffet + dt * 5);
     } else {
       this.buffet = Math.max(0, this.buffet - dt * 3);
@@ -121,7 +129,7 @@ export class Aircraft {
     this.x += f.x * this.speed * dt;
     this.y += f.y * this.speed * dt;
     this.z += f.z * this.speed * dt;
-    if (this.stalled) this.y -= (STALL_SPEED - this.speed) * 0.42 * dt;
+    if (this.stalled) this.y -= (stallSpeed - this.speed) * 0.42 * dt;
     if (!this.onGround) {
       // The sortie's steady wind drifts the whole air mass, plane and all.
       this.x += this.wind.x * dt;

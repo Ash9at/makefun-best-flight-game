@@ -1,10 +1,10 @@
 // missions.js — the sorties of the Skyward Post.
 //
-// Three jobs with different goals and a free-flight mode. Each sortie
+// Four jobs with different goals and a free-flight mode. Each sortie
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, CARRIER, rescueBoatPosition } from './world.js';
+import { GATES, GATE_RADIUS, DROP_ZONES, CARRIER, RUNWAY, rescueBoatPosition } from './world.js';
 import { STALL_SPEED } from './aircraft.js';
 
 // The weather each sortie flies in: rain and fog for the renderer, a
@@ -213,6 +213,33 @@ export class Mission {
       this.raftPhase = 'away';
       this.sound.drop();
       this.popup('RAFT AWAY', 'watch it fall — then turn for home');
+    }
+  }
+
+  // Where the sortie wants the pilot next, for the objective arrow:
+  // {x, z, label} or null when there is nothing to point at.
+  objective() {
+    if (this.state !== 'flying') return null;
+    switch (this.sortie.id) {
+      case 'gates': {
+        const g = GATES[this.nextGate];
+        return g ? { x: g.x, z: g.z, label: `RING ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
+      }
+      case 'mail': {
+        const zn = DROP_ZONES[this.zoneIndex];
+        return zn ? { x: zn.x, z: zn.z, label: 'DROP ZONE' } : null;
+      }
+      case 'carrier':
+        return { x: CARRIER.cx, z: CARRIER.cz, label: 'DECK' };
+      case 'rescue': {
+        if (this.raftPhase === 'find') {
+          const b = rescueBoatPosition(this.elapsed);
+          return { x: b.x, z: b.z, label: 'DISTRESSED BOAT' };
+        }
+        return { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
+      }
+      default:
+        return null;
     }
   }
 

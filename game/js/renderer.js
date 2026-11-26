@@ -1,93 +1,21 @@
 // renderer.js — the hand-rolled 3D view: one canvas, one projector.
 //
-// No engine and no library: a chase camera builds an orthonormal basis
-// each frame, world points are dotted onto it and divided by depth, and
-// flat-shaded polygons are painted far to near. The terrain grid colours
-// are precomputed in world.js, so a frame is projection and fills only.
+// No engine and no library: the camera (camera.js) builds an
+// orthonormal basis each frame, world points are dotted onto it and
+// divided by depth, and flat-shaded polygons are painted far to near.
+// The terrain grid colours are precomputed in world.js, so a frame is
+// projection and fills only. Particles live in particles.js.
 
+import { Camera } from './camera.js';
 import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight } from './world.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// The camera: a point in the world plus the basis it looks through.
-export class Camera {
-  constructor() {
-    this.x = 0; this.y = 240; this.z = 2200;
-    this.f = { x: 0, y: 0, z: -1 };
-    this.r = { x: 1, y: 0, z: 0 };
-    this.u = { x: 0, y: 1, z: 0 };
-    this.focal = 600;
-    this.shake = 0;
-  }
-
-  // Park the camera behind and above the plane, rolling part-way with it
-  // so the horizon leans but never spins. snap=true jumps straight there
-  // (used when a sortie starts or the plane is placed for a screenshot).
-  follow(plane, dt, snap = false) {
-    const b = plane.basis();
-    const dist = 27, up = 10;
-    const tx = plane.x - b.f.x * dist + b.u.x * up;
-    const ty = plane.y - b.f.y * dist + b.u.y * up;
-    const tz = plane.z - b.f.z * dist + b.u.z * up;
-    const gap = Math.hypot(tx - this.x, ty - this.y, tz - this.z);
-    const k = snap || gap > 160 ? 1 : 1 - Math.exp(-dt * 7);
-    this.x += (tx - this.x) * k;
-    this.y += (ty - this.y) * k;
-    this.z += (tz - this.z) * k;
-    // Look at a point ahead of the nose.
-    let fx = plane.x + b.f.x * 70 - this.x;
-    let fy = plane.y + b.f.y * 70 - this.y;
-    let fz = plane.z + b.f.z * 70 - this.z;
-    const fl = Math.hypot(fx, fy, fz) || 1;
-    fx /= fl; fy /= fl; fz /= fl;
-    this.f = { x: fx, y: fy, z: fz };
-    // Camera up: mostly the world's, leaning 55% toward the plane's.
-    const lean = 0.55;
-    let ux = b.u.x * lean, uy = 1 - lean + b.u.y * lean, uz = b.u.z * lean;
-    // right = forward x up-ish, then true up = right x forward
-    let rx = fy * uz - fz * uy, ry = fz * ux - fx * uz, rz = fx * uy - fy * ux;
-    const rl = Math.hypot(rx, ry, rz) || 1;
-    rx /= rl; ry /= rl; rz /= rl;
-    this.r = { x: rx, y: ry, z: rz };
-    this.u = {
-      x: ry * fz - rz * fy,
-      y: rz * fx - rx * fz,
-      z: rx * fy - ry * fx,
-    };
-  }
-
-  // Free orbit for the title screen: circle the island, look at its heart.
-  orbit(time) {
-    const a = time * 0.05;
-    this.x = Math.cos(a) * 2100;
-    this.z = Math.sin(a) * 2100;
-    this.y = 430 + Math.sin(time * 0.11) * 60;
-    let fx = -this.x, fy = 60 - this.y, fz = -this.z;
-    const fl = Math.hypot(fx, fy, fz) || 1;
-    this.f = { x: fx / fl, y: fy / fl, z: fz / fl };
-    // right = forward swung 90 degrees in the ground plane; up completes it.
-    let rx = -this.f.z, rz = this.f.x;
-    const rl = Math.hypot(rx, rz) || 1;
-    this.r = { x: rx / rl, y: 0, z: rz / rl };
-    this.u = {
-      x: this.r.y * this.f.z - this.r.z * this.f.y,
-      y: this.r.z * this.f.x - this.r.x * this.f.z,
-      z: this.r.x * this.f.y - this.r.y * this.f.x,
-    };
-  }
-
-  project(x, y, z, w, h) {
-    const dx = x - this.x, dy = y - this.y, dz = z - this.z;
-    const cx = dx * this.r.x + dy * this.r.y + dz * this.r.z;
-    const cy = dx * this.u.x + dy * this.u.y + dz * this.u.z;
-    const cz = dx * this.f.x + dy * this.f.y + dz * this.f.z;
-    if (cz < 4) return null;
-    const s = this.focal / cz;
-    return { x: w / 2 + cx * s, y: h / 2 - cy * s, z: cz, s };
-  }
-}
 
 const SUN = { x: -0.45, y: 0.62, z: -0.66 }; // toward the afternoon sun
+
+// Port Sable roof colours, indexed by each building's tone.
+const ROOFS = [[168, 84, 60], [96, 106, 118], [178, 120, 80], [150, 148, 140]];
 
 function shade(hex, n, sunFacing) {
   // hex like [r,g,b]; sunFacing -1..1 darkens or warms the face.
@@ -95,46 +23,6 @@ function shade(hex, n, sunFacing) {
   return `rgb(${Math.round(hex[0] * f)},${Math.round(hex[1] * f)},${Math.round(hex[2] * f)})`;
 }
 
-// One reusable particle pool: dust, spray and damage smoke.
-export class Particles {
-  constructor() {
-    this.list = [];
-  }
-  spawn(x, y, z, opts) {
-    const n = opts.n || 8;
-    for (let i = 0; i < n; i++) {
-      if (this.list.length > 420) return;
-      const a = Math.random() * Math.PI * 2;
-      const sp = (opts.speed || 6) * (0.3 + Math.random() * 0.7);
-      this.list.push({
-        x, y, z,
-        vx: Math.cos(a) * sp, vy: (opts.up || 3) * Math.random(), vz: Math.sin(a) * sp,
-        life: 0, ttl: (opts.ttl || 0.9) * (0.6 + Math.random() * 0.7),
-        size: opts.size || 3, color: opts.color || '255,255,255',
-      });
-    }
-  }
-  step(dt) {
-    for (const p of this.list) {
-      p.life += dt;
-      p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
-      p.vy -= 2.2 * dt;
-    }
-    this.list = this.list.filter((p) => p.life < p.ttl);
-  }
-  draw(ctx, cam, w, h) {
-    for (const p of this.list) {
-      const q = cam.project(p.x, p.y, p.z, w, h);
-      if (!q) continue;
-      const a = 0.55 * (1 - p.life / p.ttl);
-      ctx.fillStyle = `rgba(${p.color},${a.toFixed(3)})`;
-      const r = Math.max(1, p.size * q.s * 0.06);
-      ctx.beginPath();
-      ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-}
 
 // Draw one flat polygon from projected points.
 function poly(ctx, pts, fill) {
@@ -352,8 +240,11 @@ export class Renderer {
         ctx.closePath();
         ctx.fill();
       } else {
+        // Roofs carry the town's colour — rust, slate, clay or grey,
+        // picked per building — so Port Sable is not one beige slab.
+        const roof = ROOFS[Math.min(3, Math.floor(o.tone * 4))];
         const tones = {
-          top: shade([206, 198, 182], null, 1),
+          top: shade(roof, null, 1),
           side: shade([168, 156, 138], null, o.tone * 0.4),
           end: shade([140, 128, 110], null, -0.2 + o.tone * 0.3),
         };
@@ -560,7 +451,7 @@ export class Renderer {
     const cam = this.cam;
     const p = cam.project(bag.x, bag.y, bag.z, w, h);
     if (!p) return;
-    const s = Math.max(2.5, p.s * 0.62);
+    const s = Math.max(3.5, p.s * 1.0);
     // The canopy: a pale half-disc floating a parcel's height above it.
     ctx.fillStyle = 'rgba(245,242,235,0.92)';
     ctx.beginPath();

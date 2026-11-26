@@ -65,8 +65,10 @@ function headingTape(ctx, w, headingDeg) {
 }
 
 // A vertical tape (airspeed on the left, altitude on the right) with a
-// boxed readout of the current value.
-function verticalTape(ctx, x, y, h, value, step, fmt, title, warn) {
+// boxed readout of the current value. bands, when given, are coloured
+// ranges painted on the tape's edge: the airspeed tape carries a red
+// stall band and an amber approach band, like a real ASI.
+function verticalTape(ctx, x, y, h, value, step, fmt, title, warn, bands) {
   box(ctx, x, y, 86, h);
   label(ctx, title, x + 43, y + 13, 10.5);
   ctx.save();
@@ -75,6 +77,14 @@ function verticalTape(ctx, x, y, h, value, step, fmt, title, warn) {
   ctx.clip();
   const mid = y + h / 2 + 8;
   const pxPerUnit = 1.6;
+  if (bands) {
+    for (const b of bands) {
+      const yTop = mid - (b.to - value) * pxPerUnit;
+      const yBot = mid - (b.from - value) * pxPerUnit;
+      ctx.fillStyle = b.color;
+      ctx.fillRect(x + 74, yTop, 9, Math.max(2, yBot - yTop));
+    }
+  }
   const first = Math.floor((value - (h / 2) / pxPerUnit) / step) * step;
   for (let v = first; v < value + (h / 2) / pxPerUnit + step; v += step) {
     if (v < 0) continue;
@@ -154,11 +164,17 @@ export function drawInstruments(ctx, w, h, plane, mission, time) {
   const kt = plane.speed * 1.944;
   const altM = Math.max(0, plane.y);
   headingTape(ctx, w, plane.headingDeg());
-  verticalTape(ctx, 16, h / 2 - 130, 250, kt, 20, (v) => `${Math.round(v)}`, 'AIRSPEED KT', plane.stalled);
+  // Stall at 27 m/s is 52 kt; the approach band runs to 68 kt.
+  const asiBands = [
+    { from: 0, to: 52, color: 'rgba(255,93,71,0.55)' },
+    { from: 52, to: 68, color: 'rgba(255,176,46,0.45)' },
+  ];
+  verticalTape(ctx, 16, h / 2 - 130, 250, kt, 20, (v) => `${Math.round(v)}`, 'AIRSPEED KT', plane.stalled, asiBands);
   verticalTape(ctx, w - 102, h / 2 - 130, 250, altM, 50, (v) => `${Math.round(v)}`, 'ALTITUDE M', false);
-  // Vertical speed tucked under the altitude tape.
+  // Vertical speed tucked under the altitude tape, coloured by the
+  // touchdown bands the landing judge uses: amber past -3.6, red past -6.
   const vs = plane.vspeed;
-  label(ctx, `VSI ${vs >= 0 ? '+' : ''}${vs.toFixed(1)} m/s`, w - 59, h / 2 + 138, 12, vs < -6 ? RED : CYAN);
+  label(ctx, `VSI ${vs >= 0 ? '+' : ''}${vs.toFixed(1)} m/s`, w - 59, h / 2 + 138, 12, vs < -6 ? RED : vs < -3.6 ? '#ffb02e' : CYAN);
 
   artificialHorizon(ctx, 128, h - 118, 62, plane);
 
@@ -194,7 +210,31 @@ export function drawInstruments(ctx, w, h, plane, mission, time) {
     label(ctx, 'FUEL EXHAUSTED — GLIDE', w / 2, h * 0.30, 20, RED);
   } else if (plane.fuel < 18) {
     label(ctx, 'LOW FUEL', w / 2, h * 0.30, 17, '#ffb02e');
+  } else if (plane.damage >= 40) {
+    // Past 40 the airframe itself flies worse (aircraft.js applies it);
+    // the panel says so before the pilot blames the wind.
+    label(ctx, 'AIRFRAME DAMAGED — HANDLING DEGRADED', w / 2, h * 0.30, 15, '#ffb02e');
   }
+}
+
+// The objective cue under the heading tape: an arrow on the relative
+// bearing to the next thing the sortie wants, with its distance. obj is
+// {dist, rel, label} or null. Criterion 1 lives here: the target is
+// always findable, and "ahead" is visible at a glance.
+export function drawObjective(ctx, w, h, obj) {
+  if (!obj) return;
+  const cx = w / 2, cy = 96;
+  const ahead = Math.abs(obj.rel) < 0.25;
+  ctx.save();
+  ctx.translate(cx - 58, cy);
+  ctx.rotate(clamp(obj.rel, -1.2, 1.2));
+  ctx.fillStyle = ahead ? GREEN : LIT;
+  ctx.beginPath();
+  ctx.moveTo(0, -8); ctx.lineTo(5.5, 6); ctx.lineTo(0, 2.5); ctx.lineTo(-5.5, 6);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  const distTxt = obj.dist >= 1000 ? `${(obj.dist / 1000).toFixed(1)} KM` : `${Math.round(obj.dist)} M`;
+  label(ctx, `${obj.label} · ${distTxt}`, cx + 8, cy, 13, ahead ? GREEN : CYAN, 'left');
 }
 
 // A centred event banner: gate cleared, mail away, touchdown judged.

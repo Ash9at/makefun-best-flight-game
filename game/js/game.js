@@ -5,10 +5,14 @@
 // direction and the banner queue; the flying itself lives in
 // aircraft.js, the jobs in missions.js, the panel in instruments.js.
 
-import { Renderer, Particles } from './renderer.js';
+import { Renderer } from './renderer.js';
+import { Particles } from './particles.js';
 import { Aircraft } from './aircraft.js';
+import { Traffic } from './traffic.js';
+import { PilotLog } from './pilotlog.js';
+import { autopilotInput } from './autopilot.js';
 import { Mission, SORTIES } from './missions.js';
-import { drawInstruments, drawBanner, drawPathMarker } from './instruments.js';
+import { drawInstruments, drawBanner, drawPathMarker, drawObjective } from './instruments.js';
 import { Sound } from './audio.js';
 import { RUNWAY } from './world.js';
 
@@ -22,44 +26,13 @@ const particles = new Particles();
 const plane = new Aircraft();
 const sound = new Sound();
 
-// The other mail plane: it flies its own circuit of the island all day,
-// in the menus and in every sortie, and never once lands. Waypoints are
-// (x, z) around the island at a safe, scenic height.
-const traffic = new Aircraft();
-traffic.reset({ x: 1900, y: 285, z: 300, yaw: -1.2, speed: 58, throttle: 0.62 });
-const TRAFFIC_ROUTE = [[600, -1900], [-1900, -400], [-700, 1900], [1900, 300]];
-let trafficLeg = 0;
-function stepTraffic(dt) {
-  const [tx, tz] = TRAFFIC_ROUTE[trafficLeg];
-  const dx = tx - traffic.x, dz = tz - traffic.z;
-  if (Math.hypot(dx, dz) < 240) trafficLeg = (trafficLeg + 1) % TRAFFIC_ROUTE.length;
-  let headErr = Math.atan2(dx, -dz) - traffic.yaw;
-  while (headErr > Math.PI) headErr -= Math.PI * 2;
-  while (headErr < -Math.PI) headErr += Math.PI * 2;
-  traffic.throttle = 0.62;
-  traffic.step(dt, {
-    roll: Math.max(-0.55, Math.min(0.55, headErr * 1.3)),
-    pitch: Math.max(-0.5, Math.min(0.5, (285 - traffic.y) * 0.012 - traffic.vspeed * 0.02)),
-    throttleDelta: 0,
-    rudder: 0,
-  }, time);
-}
-
-// The pilot log: best score and rank per sortie, kept in memory for
-// the session (the hosted page may not store anything), shown on the
-// campaign board that the title screen has become.
-const pilotLog = {}; // sortie id -> {best, rank, plays}
+// The other mail plane (traffic.js) and the pilot's log book
+// (pilotlog.js): the living world and the campaign memory.
+const traffic = new Traffic();
+const pilotLog = new PilotLog();
 let lastWasBest = false;
 function recordResult() {
-  const id = mission.sortie.id;
-  const entry = pilotLog[id] || (pilotLog[id] = { best: 0, rank: '—', plays: 0 });
-  entry.plays++;
-  lastWasBest = false;
-  if (mission.state === 'complete' && mission.result.score > entry.best) {
-    entry.best = mission.result.score;
-    entry.rank = mission.result.rank;
-    lastWasBest = true;
-  }
+  lastWasBest = pilotLog.record(mission);
 }
 
 let screen = 'title'; // title | brief | fly | done
@@ -71,23 +44,10 @@ let lastStamp = performance.now();
 let paused = false;
 let menuArmed = false; // the menu's autopilot flight is set up once
 
-// Demo hold: an autopilot that keeps the plane on a heading and height.
-// The title screen uses it to fly the island; screenshots use it too.
+// Demo hold: the autopilot (autopilot.js) keeps the plane on a heading
+// and height. The title screen uses it to fly the island; screenshots
+// use it too.
 let demoHold = null; // {heading, alt}
-function autopilotInput() {
-  const b = plane.basis();
-  let headErr = demoHold.heading - plane.yaw;
-  while (headErr > Math.PI) headErr -= Math.PI * 2;
-  while (headErr < -Math.PI) headErr += Math.PI * 2;
-  const altErr = demoHold.alt - plane.y;
-  return {
-    roll: Math.max(-1, Math.min(1, headErr * 1.4)),
-    pitch: Math.max(-1, Math.min(1, altErr * 0.012 - plane.vspeed * 0.02)),
-    throttleDelta: 0,
-    rudder: 0,
-    _b: b,
-  };
-}
 
 // --- Keyboard ------------------------------------------------------------
 const keys = new Set();
@@ -178,13 +138,12 @@ function drawTitle() {
     }
     text(`${i + 1}  ${s.name}`, W / 2 - 288, y - 4, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
     text(s.tagline, W / 2 + 288, y - 4, 12.5, '#8fb6cc', 'right');
-    const log = pilotLog[s.id];
+    const log = pilotLog.get(s.id);
     text(log ? `BEST ${log.best} · RANK ${log.rank} · flown ${log.plays}×` : '— not flown yet —',
       W / 2 + 288, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
-  const flown = SORTIES.filter((s) => pilotLog[s.id]).length;
-  const total = SORTIES.reduce((sum, s) => sum + (pilotLog[s.id] ? pilotLog[s.id].best : 0), 0);
-  text(`CAMPAIGN — ${flown} of ${SORTIES.length} sorties flown · best total ${total} · ↑ ↓ choose · ENTER briefing`, W / 2, 532, 14.5, '#cfe3f2');
+  const camp = pilotLog.campaign(SORTIES);
+  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total} · ↑ ↓ choose · ENTER briefing`, W / 2, 532, 14.5, '#cfe3f2');
   text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 560, 13, '#8fb6cc');
 }
 
@@ -230,16 +189,21 @@ function frame(now) {
       menuArmed = true;
     }
     demoHold = { heading: plane.yaw + 0.32, alt: 300 };
-    const input = autopilotInput();
+    const input = autopilotInput(plane, demoHold);
     plane.step(dt, input, time);
-    stepTraffic(dt);
+    traffic.step(dt, time);
     renderer.cam.follow(plane, dt);
-    renderer.render(W, H, { plane, traffic, time, gates: null, gateState: null, zones: null, activeZone: -1, bag: null, particles });
+    renderer.render(W, H, { plane, traffic: traffic.plane, time, gates: null, gateState: null, zones: null, activeZone: -1, bag: null, particles });
   } else if (screen === 'fly' || screen === 'done') {
     if (screen === 'fly' && !paused) {
-      const input = demoHold ? autopilotInput() : pilotInput();
+      const input = demoHold ? autopilotInput(plane, demoHold) : pilotInput();
+      const prevVs = plane.vspeed;
       const events = plane.step(dt, input, time);
-      if (events.touchedDown) sound.thud();
+      if (events.touchedDown) {
+        sound.thud();
+        // The arrival is felt as well as heard: shake with the sink.
+        renderer.cam.shake = plane.crashed ? 0.55 : Math.min(0.5, 0.10 + Math.abs(prevVs) * 0.045);
+      }
       if (plane.crashed === 'water') particles.spawn(plane.x, 2, plane.z, { n: 60, speed: 14, up: 12, ttl: 1.3, size: 5, color: '210,235,250' });
       if (plane.crashed) particles.spawn(plane.x, plane.y + 2, plane.z, { n: 40, speed: 9, up: 7, ttl: 1.1, size: 5, color: '70,70,70' });
       if (plane.onGround && plane.speed > 18) particles.spawn(plane.x, plane.y - 1, plane.z, { n: 2, speed: 3, up: 2, ttl: 0.7, size: 3, color: '200,190,160' });
@@ -256,13 +220,23 @@ function frame(now) {
         screen = 'done';
       }
     }
-    stepTraffic(dt);
+    traffic.step(dt, time);
     particles.step(dt);
     renderer.cam.follow(plane, dt);
     const sc = mission.scene();
-    renderer.render(W, H, { plane, traffic, time, particles, weather: mission.sortie.weather, ...sc });
+    renderer.render(W, H, { plane, traffic: traffic.plane, time, particles, weather: mission.sortie.weather, ...sc });
     drawPathMarker(ctx, W, H, plane);
     drawInstruments(ctx, W, H, plane, mission.hud(), time);
+    if (screen === 'fly' && mission.state === 'flying') {
+      const o = mission.objective();
+      if (o) {
+        const dx = o.x - plane.x, dz = o.z - plane.z;
+        let rel = Math.atan2(dx, -dz) - plane.yaw;
+        while (rel > Math.PI) rel -= Math.PI * 2;
+        while (rel < -Math.PI) rel += Math.PI * 2;
+        drawObjective(ctx, W, H, { dist: Math.hypot(dx, dz), rel, label: o.label });
+      }
+    }
     if (banner && time < banner.until) {
       drawBanner(ctx, W, H, banner.text, banner.sub, Math.min(1, (banner.until - time) / 0.5));
     }
@@ -295,8 +269,8 @@ window.SKYPOST = {
     raftPhase: mission.raftPhase, raftScore: mission.raftScore,
     score: mission.result ? mission.result.score : null,
     wind: plane.wind, fuel: Math.round(plane.fuel), damage: Math.round(plane.damage),
-    traffic: { x: Math.round(traffic.x), y: Math.round(traffic.y), z: Math.round(traffic.z) },
-    log: pilotLog,
+    traffic: { x: Math.round(traffic.plane.x), y: Math.round(traffic.plane.y), z: Math.round(traffic.plane.z) },
+    log: pilotLog.entries,
   } : null),
   state: () => ({ screen, x: plane.x, y: plane.y, z: plane.z, yaw: plane.yaw, speed: plane.speed, crashed: plane.crashed }),
   cam: () => ({

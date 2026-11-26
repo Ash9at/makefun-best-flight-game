@@ -48,9 +48,14 @@ node -e "require('http').createServer((q,r)=>{const fs=require('fs');const p=q.u
 Every file has one job, and the names say which:
 
 - `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, scenery, and the living traffic of boats and birds.
-- `game/js/renderer.js` — the hand-rolled 3D projector: chase camera, terrain, carrier, rings, boats, weather (storm sky, fog, rain, the rescue flare), and the polygon-built mail plane.
+- `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, weather (storm sky, fog, rain, the rescue flare), and the polygon-built mail plane.
+- `game/js/camera.js` — the chase camera, its projection, and touchdown shake.
+- `game/js/particles.js` — dust, spray and damage smoke.
 - `game/js/aircraft.js` — the flight model: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
 - `game/js/missions.js` — the four sorties and free flight: objectives, weather, scoring, debriefs.
+- `game/js/traffic.js` — the other mail plane on its all-day circuit.
+- `game/js/autopilot.js` — the demo hold that flies the menus.
+- `game/js/pilotlog.js` — the session log book behind the campaign board.
 - `game/js/instruments.js` — the HUD: tapes, horizon, gauges, banners.
 - `game/js/audio.js` — the synthesised engine, wind and chimes.
 - `game/js/game.js` — boot, keyboard, screens (title, briefing, flying, debrief) and the frame loop.
