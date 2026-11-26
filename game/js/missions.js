@@ -23,6 +23,8 @@ export const SORTIES = [
       'The clock runs from the first ring. Rings 4 and 8 hug',
       'the volcano shoulders and ring 10 grazes the ridge:',
       'thread those gently, and land home for the full score.',
+      'Bent or thirsty? A pit stop on the strip repairs and',
+      'refuels — and costs 25 seconds of clock.',
     ],
     spawn: { x: 0, y: 175, z: 2150, yaw: 0, speed: 58, throttle: 0.6 },
     weather: FAIR,
@@ -271,6 +273,22 @@ export class Mission {
   }
 
   updateGates(plane) {
+    // The pit stop: a full stop on the strip before the last ring is
+    // a trade — the crew refuels and patches the airframe, and the
+    // clock takes 25 s for it. Worth it after a bent arrival or a
+    // thirsty first half; a detour that costs the lead if it is not.
+    if (this.nextGate < GATES.length && plane.onGround && plane.overRunway() && plane.speed < 4) {
+      if (!this.pitDone) {
+        this.pitDone = true;
+        this.elapsed += 25;
+        plane.fuel = 100;
+        plane.damage = 0;
+        this.sound.gate();
+        this.popup('PIT STOP', 'refuelled and patched — 25 s on the clock');
+      }
+    } else if (!plane.onGround) {
+      this.pitDone = false;
+    }
     if (this.nextGate < GATES.length) {
       const g = GATES[this.nextGate];
       const d = Math.hypot(plane.x - g.x, plane.y - g.y, plane.z - g.z);

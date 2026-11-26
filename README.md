@@ -8,7 +8,7 @@ An original chase-view flight game for the make.fun [best flight game](https://m
 
 ## The sorties
 
-1. **Gate Circuit** — 12 rings around the island against the clock; the clock starts at the first ring, and the full score needs a landing back on the strip. Rings 4 and 8 hug the volcano's shoulders and ring 10 grazes the south-west ridge, so the route alternates high cruising with thread-the-needle flying.
+1. **Gate Circuit** — 12 rings around the island against the clock; the clock starts at the first ring, and the full score needs a landing back on the strip. Rings 4 and 8 hug the volcano's shoulders and ring 10 grazes the south-west ridge, so the route alternates high cruising with thread-the-needle flying. A mid-circuit pit stop on the strip trades 25 s of clock for fuel and repairs.
 2. **Mail Drop** — 3 mail bags for 3 painted circles (the town green, the south farm, the lighthouse point). Bags keep the plane's speed and fall under a canopy: lead the target, score by the metre.
 3. **Carrier Landing** — one 300 m deck, a yellow touchdown box, judged on centreline deviation, touchdown zone and sink rate.
 4. **Storm Rescue** — a fishing boat dead in a dusk storm south-east of the island. Weather is a system here, not a skin: rain, fog, a steady westerly drift and gusts that shove the nose and rock the wings. Find her by her red flare, drop the supply raft alongside (scored by the metre), then get home and land — on the strip, or, bravely, on the deck.
