@@ -251,18 +251,34 @@ export function drawBanner(ctx, w, h, text, sub, alpha) {
   ctx.restore();
 }
 
-// The little cross the pilot flies toward: a flight-path marker.
-export function drawPathMarker(ctx, w, h, plane) {
-  const cx = w / 2, cy = h / 2;
-  const dx = clamp(-plane.roll * 30, -40, 40);
-  ctx.strokeStyle = 'rgba(125,224,141,0.9)';
+// The flight-path vector: where the plane is actually going, not
+// where its nose points. The velocity (nose vector times speed, plus
+// the wind's drift, plus the stall's downward slide when the wing has
+// given up) is projected through the camera, and the little circle
+// sits on that point — put it on the touchdown box and that is where
+// the wheels will arrive. It is the mark a pilot flies on final.
+export function drawPathMarker(ctx, w, h, plane, cam) {
+  if (!cam || plane.speed < 6) return;
+  const b = plane.basis();
+  const slide = plane.stalled ? (27 - plane.speed) * 0.42 : 0;
+  const vx = b.f.x * plane.speed + (plane.onGround ? 0 : plane.wind.x);
+  const vy = b.f.y * plane.speed - slide;
+  const vz = b.f.z * plane.speed + (plane.onGround ? 0 : plane.wind.z);
+  const len = Math.hypot(vx, vy, vz) || 1;
+  const p = cam.project(
+    plane.x + (vx / len) * 260,
+    plane.y + (vy / len) * 260,
+    plane.z + (vz / len) * 260, w, h);
+  if (!p) return;
+  const cx = clamp(p.x, 30, w - 30), cy = clamp(p.y, 30, h - 30);
+  ctx.strokeStyle = plane.stalled ? 'rgba(255,93,71,0.95)' : 'rgba(125,224,141,0.9)';
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(cx + dx, cy + 26, 9, 0, Math.PI * 2);
+  ctx.arc(cx, cy, 9, 0, Math.PI * 2);
   ctx.stroke();
   ctx.beginPath();
-  ctx.moveTo(cx + dx - 20, cy + 26); ctx.lineTo(cx + dx - 10, cy + 26);
-  ctx.moveTo(cx + dx + 10, cy + 26); ctx.lineTo(cx + dx + 20, cy + 26);
-  ctx.moveTo(cx + dx, cy + 17); ctx.lineTo(cx + dx, cy + 12);
+  ctx.moveTo(cx - 20, cy); ctx.lineTo(cx - 10, cy);
+  ctx.moveTo(cx + 10, cy); ctx.lineTo(cx + 20, cy);
+  ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy - 15);
   ctx.stroke();
 }

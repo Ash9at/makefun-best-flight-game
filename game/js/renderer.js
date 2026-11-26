@@ -7,7 +7,7 @@
 // projection and fills only. Particles live in particles.js.
 
 import { Camera } from './camera.js';
-import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight } from './world.js';
+import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight, LIGHTHOUSE, FIELDS, ROADS } from './world.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -72,8 +72,13 @@ export class Renderer {
     const horizon = cam.project(cam.x + cam.f.x * 4000, cam.y + cam.f.y * 4000 - cam.y * 0 + 0, cam.z + cam.f.z * 4000, w, h);
     let hy = horizon ? horizon.y : h / 2;
     hy = clamp(hy, -h * 0.4, h * 1.2);
+    const night = !!this.night;
     const sky = ctx.createLinearGradient(0, -h * 0.2, 0, Math.max(hy, 1));
-    if (storm) {
+    if (night) {
+      sky.addColorStop(0, '#050914');
+      sky.addColorStop(0.55, '#0e1c31');
+      sky.addColorStop(1, '#2b405c');
+    } else if (storm) {
       sky.addColorStop(0, '#232f3a');
       sky.addColorStop(0.55, '#54626d');
       sky.addColorStop(1, '#93a3ab');
@@ -85,7 +90,11 @@ export class Renderer {
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, Math.max(hy, 0));
     const sea = ctx.createLinearGradient(0, Math.max(hy, 0), 0, h);
-    if (storm) {
+    if (night) {
+      sea.addColorStop(0, '#1a2a3a');
+      sea.addColorStop(0.25, '#101e2c');
+      sea.addColorStop(1, '#08131d');
+    } else if (storm) {
       sea.addColorStop(0, '#5d6f76');
       sea.addColorStop(0.25, '#33454f');
       sea.addColorStop(1, '#1d2c36');
@@ -96,8 +105,31 @@ export class Renderer {
     }
     ctx.fillStyle = sea;
     ctx.fillRect(0, Math.max(hy, 0), w, h - Math.max(hy, 0));
+    if (night) {
+      // Stars: fixed screen-space field above the horizon, hashed so
+      // they never swim between frames; and a pale moon riding high.
+      ctx.fillStyle = 'rgba(220,232,248,0.85)';
+      for (let i = 0; i < 150; i++) {
+        const hx = Math.abs(Math.sin(i * 127.1 + 311.7) * 43758.5453) % 1;
+        const hy2 = Math.abs(Math.sin(i * 269.5 + 183.3) * 28001.8384) % 1;
+        const sx = hx * w, sy = hy2 * Math.max(hy, 0) * 0.92;
+        if (sy > hy - 2) continue;
+        ctx.globalAlpha = 0.25 + 0.6 * ((i * 37) % 10) / 10;
+        ctx.fillRect(sx, sy, (i % 7 === 0) ? 2 : 1, (i % 7 === 0) ? 2 : 1);
+      }
+      ctx.globalAlpha = 1;
+      const moon = cam.project(cam.x - SUN.x * 5000, cam.y + 3400, cam.z - SUN.z * 5000, w, h);
+      if (moon) {
+        const g = ctx.createRadialGradient(moon.x, moon.y, 3, moon.x, moon.y, 90);
+        g.addColorStop(0, 'rgba(232,240,250,0.95)');
+        g.addColorStop(0.18, 'rgba(200,216,238,0.5)');
+        g.addColorStop(1, 'rgba(200,216,238,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(moon.x - 95, moon.y - 95, 190, 190);
+      }
+    }
     // The sun, when it is in front of the camera (a storm swallows it).
-    const sun = storm ? null : cam.project(cam.x + SUN.x * 5000, cam.y + SUN.y * 5000, cam.z + SUN.z * 5000, w, h);
+    const sun = storm || night ? null : cam.project(cam.x + SUN.x * 5000, cam.y + SUN.y * 5000, cam.z + SUN.z * 5000, w, h);
     if (sun) {
       const g = ctx.createRadialGradient(sun.x, sun.y, 4, sun.x, sun.y, 130);
       g.addColorStop(0, 'rgba(255,246,214,0.95)');
@@ -120,7 +152,7 @@ export class Renderer {
     for (const { q, c } of sorted) {
       const r = c.s * q.s;
       if (r < 6) continue;
-      ctx.fillStyle = this.storm ? 'rgba(150,160,168,0.9)' : 'rgba(255,255,255,0.78)';
+      ctx.fillStyle = this.night ? 'rgba(36,48,68,0.88)' : this.storm ? 'rgba(150,160,168,0.9)' : 'rgba(255,255,255,0.78)';
       for (const [ox, oy, orr] of [[0, 0, 1], [-0.7, 0.14, 0.66], [0.72, 0.16, 0.6], [0.1, -0.3, 0.55]]) {
         ctx.beginPath();
         ctx.ellipse(q.x + ox * r, q.y + oy * r * 0.4, r * orr, r * orr * 0.36, 0, 0, Math.PI * 2);
@@ -207,6 +239,26 @@ export class Renderer {
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
     }
+    // Edge lights after dark (night, or the storm's dusk): two rows of
+    // amber lamps the length of the strip, green at the near threshold.
+    // In the night sortie they are how the strip is found at all.
+    if (this.night || this.storm) {
+      for (let d = -halfLen; d <= halfLen; d += 76) {
+        for (const side of [-1, 1]) {
+          const p = cam.project(cx + d, elev + 1.1, cz + side * (halfWid + 3), w, h);
+          if (!p || p.z > 2600) continue;
+          ctx.fillStyle = 'rgba(255,196,92,0.95)';
+          ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.3, p.s * 0.55), 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      for (const endX of [cx - halfLen, cx + halfLen]) {
+        const p = cam.project(endX, elev + 1.1, cz, w, h);
+        if (p && p.z < 2600) {
+          ctx.fillStyle = '#7de08d';
+          ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.6, p.s * 0.7), 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
   }
 
   drawScenery(w, h) {
@@ -248,7 +300,122 @@ export class Renderer {
           side: shade([168, 156, 138], null, o.tone * 0.4),
           end: shade([140, 128, 110], null, -0.2 + o.tone * 0.3),
         };
+        if (this.night) {
+          // After dark the town goes lamplit: dark walls, and the roof
+          // reads only as a silhouette against the sky.
+          tones.top = shade(roof, null, -0.55);
+          tones.side = shade([52, 54, 60], null, 0.1);
+          tones.end = shade([44, 46, 52], null, 0);
+        }
         drawBox(ctx, cam, w, h, o.x, o.y + o.h / 2, o.z, o.w / 2, o.h / 2, o.d / 2, 0, tones);
+        if (this.night) {
+          // Lit windows: a few amber panes on the two faces a pilot
+          // sees coming in — south and east — placed by a hash of the
+          // building so they never swim between frames.
+          const seed = Math.abs(Math.sin(o.x * 12.9898 + o.z * 78.233) * 43758.5453) % 1;
+          const rows = 3 + Math.floor(seed * 3);
+          for (let k = 0; k < rows; k++) {
+            const fy = o.y + o.h * (0.3 + 0.22 * (k % 3));
+            const onSouth = k % 2 === 0;
+            const fx = onSouth
+              ? o.x + ((seed * 7 + k * 0.37) % 1 - 0.5) * o.w * 0.62
+              : o.x + o.w / 2 + 0.4;
+            const fz = onSouth
+              ? o.z + o.d / 2 + 0.4
+              : o.z + ((seed * 5 + k * 0.53) % 1 - 0.5) * o.d * 0.62;
+            const p = cam.project(fx, fy, fz, w, h);
+            if (!p || p.z > 2200) continue;
+            // A halo first, then the pane: lamplight, not a pixel.
+            const s = Math.max(2.1, p.s * 1.9);
+            ctx.fillStyle = 'rgba(255,190,100,0.20)';
+            ctx.fillRect(p.x - s * 1.15, p.y - s * 1.4, s * 2.3, s * 2.8);
+            ctx.fillStyle = (k % 3 === 0) ? 'rgba(255,220,150,0.98)' : 'rgba(255,192,105,0.92)';
+            ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s * 1.25);
+          }
+        }
+      }
+    }
+  }
+
+  // The island's landmarks, drawn on the ground: the dirt roads a
+  // pilot navigates by, the south farm's field patchwork, and the
+  // lighthouse on the east point — white tower, red band, and after
+  // dark a beam that sweeps the water on a slow turn.
+  drawLandmarks(w, h, time) {
+    const ctx = this.ctx;
+    const cam = this.cam;
+    // Farm fields: quads that follow the slope's corner heights.
+    for (const f of FIELDS) {
+      const c = Math.cos(f.yaw), s = Math.sin(f.yaw);
+      const corner = (lx, lz) => ({
+        x: f.x + lx * c - lz * s,
+        z: f.z + lx * s + lz * c,
+      });
+      const pts = [corner(-f.w / 2, -f.d / 2), corner(f.w / 2, -f.d / 2), corner(f.w / 2, f.d / 2), corner(-f.w / 2, f.d / 2)]
+        .map((p) => cam.project(p.x, groundHeight(p.x, p.z) + 0.4, p.z, w, h));
+      if (pts.some((p) => !p)) continue;
+      const t = this.night ? f.tone.map((v) => Math.round(v * 0.42)) : f.tone;
+      poly(ctx, pts, `rgb(${t[0]},${t[1]},${t[2]})`);
+    }
+    // Roads: each polyline walked in short steps, ribboned onto the
+    // ground at a fixed width.
+    ctx.fillStyle = this.night ? '#2e2c26' : '#6d6353';
+    for (const road of ROADS) {
+      for (let i = 0; i + 1 < road.length; i++) {
+        const [ax, az] = road[i];
+        const [bx, bz] = road[i + 1];
+        const len = Math.hypot(bx - ax, bz - az);
+        const steps = Math.max(1, Math.round(len / 34));
+        const px = -(bz - az) / len, pz = (bx - ax) / len; // perpendicular
+        for (let k = 0; k < steps; k++) {
+          const t0 = k / steps, t1 = (k + 1) / steps;
+          const quad = [
+            [ax + (bx - ax) * t0 + px * 4.5, az + (bz - az) * t0 + pz * 4.5],
+            [ax + (bx - ax) * t0 - px * 4.5, az + (bz - az) * t0 - pz * 4.5],
+            [ax + (bx - ax) * t1 - px * 4.5, az + (bz - az) * t1 - pz * 4.5],
+            [ax + (bx - ax) * t1 + px * 4.5, az + (bz - az) * t1 + pz * 4.5],
+          ].map(([x, z]) => cam.project(x, groundHeight(x, z) + 0.45, z, w, h));
+          if (quad.some((p) => !p)) continue;
+          poly(ctx, quad, ctx.fillStyle);
+        }
+      }
+    }
+    // The lighthouse: stacked drums — white, red band, white — and a
+    // dark lamp room on top.
+    const L = LIGHTHOUSE;
+    const seg = (y0, y1, hx, col) => drawBox(ctx, cam, w, h, L.x, L.y + (y0 + y1) / 2, L.z, hx, (y1 - y0) / 2, hx, 0.4, {
+      top: shade(col, null, 0.8), side: shade(col, null, 0.1), end: shade(col, null, -0.25),
+    });
+    seg(0, 13, 3.6, [228, 226, 218]);
+    seg(13, 21, 3.1, [178, 52, 42]);
+    seg(21, 30, 2.6, [228, 226, 218]);
+    seg(30, 34, 2.0, [38, 44, 52]);
+    if (this.night || this.storm) {
+      // The lamp, and the beam sweeping from it: two soft triangles
+      // turning slowly, reaching out over the water.
+      const lampY = L.y + 32;
+      const q = cam.project(L.x, lampY, L.z, w, h);
+      if (q) {
+        const g = ctx.createRadialGradient(q.x, q.y, 1, q.x, q.y, 44);
+        g.addColorStop(0, 'rgba(255,244,200,0.95)');
+        g.addColorStop(0.25, 'rgba(255,232,160,0.45)');
+        g.addColorStop(1, 'rgba(255,232,160,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(q.x - 46, q.y - 46, 92, 92);
+      }
+      const ang = time * 0.45;
+      for (const spread of [0.16, 0.07]) {
+        const a1 = ang - spread, a2 = ang + spread;
+        const p1 = cam.project(L.x + Math.cos(a1) * 760, lampY - 26, L.z + Math.sin(a1) * 760, w, h);
+        const p2 = cam.project(L.x + Math.cos(a2) * 760, lampY - 26, L.z + Math.sin(a2) * 760, w, h);
+        if (!q || !p1 || !p2) continue;
+        ctx.fillStyle = spread > 0.1 ? 'rgba(255,240,190,0.055)' : 'rgba(255,244,205,0.10)';
+        ctx.beginPath();
+        ctx.moveTo(q.x, q.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.closePath();
+        ctx.fill();
       }
     }
   }
@@ -332,11 +499,23 @@ export class Renderer {
   }
 
   // A mail drop zone: a painted ring lying on the ground, with a flag.
+  // After dark the ring is a circle of lanterns — the only way the
+  // night mail finds its targets.
   drawDropZone(w, h, zone, active) {
     const ctx = this.ctx;
     const cam = this.cam;
     const SEG = 20;
-    ctx.strokeStyle = active ? '#ffd23e' : 'rgba(255,210,62,0.45)';
+    if (this.night) {
+      // Lantern dots around the ring, then the ring itself brighter.
+      for (let i = 0; i < SEG; i += 2) {
+        const a = (i / SEG) * Math.PI * 2;
+        const p = cam.project(zone.x + Math.cos(a) * DROP_RADIUS, groundHeight(zone.x + Math.cos(a) * DROP_RADIUS, zone.z + Math.sin(a) * DROP_RADIUS) + 2.2, zone.z + Math.sin(a) * DROP_RADIUS, w, h);
+        if (!p || p.z > 2400) continue;
+        ctx.fillStyle = active ? 'rgba(255,210,92,0.95)' : 'rgba(255,196,92,0.6)';
+        ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(1.3, p.s * 0.55), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.strokeStyle = active ? '#ffd23e' : this.night ? 'rgba(255,210,62,0.75)' : 'rgba(255,210,62,0.45)';
     let prev = null;
     let lw = 2;
     for (let i = 0; i <= SEG; i++) {
@@ -616,12 +795,14 @@ export class Renderer {
   render(w, h, scene) {
     const weather = scene.weather || { rain: 0, dusk: false, fog: 0 };
     this.storm = !!weather.dusk;
+    this.night = !!weather.night;
     this.fog = weather.fog || 0;
     this.cam.focal = h * 0.92;
     this.drawSkyAndSea(w, h, this.storm);
     this.drawClouds(w, h);
     this.drawTerrain(w, h);
     this.drawRunway(w, h);
+    this.drawLandmarks(w, h, scene.time);
     this.drawCarrier(w, h);
     for (const b of BOATS) {
       const p = boatPosition(b, scene.time);
@@ -637,7 +818,16 @@ export class Renderer {
     if (scene.particles) scene.particles.draw(this.ctx, this.cam, w, h);
     if (scene.traffic) this.drawAircraft(w, h, scene.traffic, scene.time);
     if (scene.plane && scene.showAircraft !== false) this.drawAircraft(w, h, scene.plane, scene.time);
-    if (this.storm) {
+    if (this.night) {
+      // Night deepens the world a touch; the lamps drawn into it —
+      // windows, strip lights, the lighthouse — carry the picture.
+      this.ctx.fillStyle = 'rgba(6,10,24,0.36)';
+      this.ctx.fillRect(0, 0, w, h);
+      if (weather.fog > 0) {
+        this.ctx.fillStyle = `rgba(110,132,164,${(weather.fog * 0.20).toFixed(3)})`;
+        this.ctx.fillRect(0, 0, w, h);
+      }
+    } else if (this.storm) {
       // Dusk gloom over the whole world, then the rain in front of it.
       this.ctx.fillStyle = 'rgba(30,40,56,0.20)';
       this.ctx.fillRect(0, 0, w, h);

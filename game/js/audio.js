@@ -64,7 +64,10 @@ export class Sound {
   update(plane) {
     if (!this.started || !plane) return;
     const t = this.ctx.currentTime;
-    const rpm = plane.crashed ? 0 : 0.25 + plane.throttle * 0.75;
+    // An empty tank is a dead engine, whatever the lever says: the
+    // prop winds down to windmilling and only the wind is left.
+    const lever = plane.fuel > 0 ? plane.throttle : 0;
+    const rpm = plane.crashed ? 0 : 0.25 + lever * 0.75;
     const freq = 52 + rpm * 68 + plane.speed * 0.22;
     this.engOscA.frequency.setTargetAtTime(freq, t, 0.08);
     this.engOscB.frequency.setTargetAtTime(freq * 0.5 + 3, t, 0.08);
@@ -96,6 +99,22 @@ export class Sound {
   gate() { this.blip(880, 0.14, 0.15); this.blip(1318, 0.2, 0.13, 0.07); }
   drop() { this.blip(520, 0.12, 0.12); }
   scored() { this.blip(784, 0.14, 0.14); this.blip(1046, 0.22, 0.14, 0.09); }
+  // The stall warning: a harsh low buzz, repeated while the wing is
+  // stalled — the sound a pilot learns to fear before the sight.
+  warn() {
+    if (!this.started) return;
+    const ctx = this.ctx;
+    const t0 = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.value = 196;
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.07, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+    osc.connect(g); g.connect(this.master);
+    osc.start(t0); osc.stop(t0 + 0.2);
+  }
   thud() {
     if (!this.started) return;
     const ctx = this.ctx;

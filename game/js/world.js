@@ -61,6 +61,17 @@ export function groundHeight(x, z) {
   let h = islandHeight(x, z);
   h = lerp(h, RUNWAY.elev, runwayBlend(x, z));
   h = lerp(h, TOWN.elev, townBlend(x, z));
+  // The graded approaches: the strip was cut into a saddle, and its
+  // approaches were graded with it — a 3% ramp falling away from each
+  // end of the strip, so a pilot on a proper glide slope clears the
+  // hills that guard the pocket. Only ever lowers the ground.
+  const endDist = Math.abs(x - RUNWAY.cx) - RUNWAY.halfLen;
+  const latDist = Math.abs(z - RUNWAY.cz);
+  if (endDist > 0 && latDist < 130) {
+    const blend = smooth(130, 55, latDist) * smooth(1050, 700, endDist);
+    const ramp = RUNWAY.elev + endDist * 0.03;
+    if (blend > 0 && ramp < h) h = lerp(h, ramp, blend);
+  }
   return h;
 }
 
@@ -189,6 +200,43 @@ export const DROP_ZONES = [
 ];
 export const DROP_RADIUS = 46;
 for (const zone of DROP_ZONES) zone.y = groundHeight(zone.x, zone.z);
+
+// --- Landmarks: the island's named, recognisable furniture -------------
+// The lighthouse on the east point, beside the third drop zone: a white
+// tower with a red band, whose beam sweeps the water after dark. It is
+// the first thing a pilot looks for coming in from the sea.
+export const LIGHTHOUSE = { x: 1262, z: 468, h: 34 };
+LIGHTHOUSE.y = groundHeight(LIGHTHOUSE.x, LIGHTHOUSE.z);
+
+// The south farm's fields: a patchwork of small plots below the farm
+// drop zone, each a quad that follows the slope's corner heights, in
+// the greens and golds of worked land.
+export const FIELDS = [];
+{
+  const rng = makeRng(4177);
+  const tones = [[122, 166, 74], [172, 158, 82], [96, 146, 66], [188, 172, 96], [110, 138, 70]];
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 4; col++) {
+      if (rng() < 0.18) continue;
+      FIELDS.push({
+        x: -640 + col * 118 + (rng() - 0.5) * 14,
+        z: 1150 + row * 104 + (rng() - 0.5) * 12,
+        w: 96 + rng() * 22, d: 82 + rng() * 18,
+        yaw: (rng() - 0.5) * 0.35,
+        tone: tones[Math.floor(rng() * tones.length)],
+      });
+    }
+  }
+}
+
+// Roads a pilot can navigate by: the town to the strip, the strip on
+// to the south farm, and the coast road out to the lighthouse point.
+// Each road is a polyline the renderer ribbons onto the ground.
+export const ROADS = [
+  [[618, 210], [430, 430], [220, 640], [152, 742]],
+  [[140, 800], [-90, 905], [-290, 1005], [-405, 1052]],
+  [[700, 190], [905, 285], [1095, 380], [1172, 415]],
+];
 
 // --- Living water and air ----------------------------------------------
 // Fishing boats putting along slow circular routes offshore. Their

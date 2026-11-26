@@ -106,10 +106,14 @@ export class Aircraft {
 
     // Speed: thrust against drag, trading height for pace on the slope.
     // A banked wing pays induced drag, so hard turns bleed speed and a
-    // gate line flown sloppily arrives at the low rings slow.
+    // gate line flown sloppily arrives at the low rings slow. With the
+    // tank dry the prop stops and she glides like what she is — a light
+    // sailplane with a job: power-off drag falls to a fifth, best glide
+    // near 33 m/s at a gentle 3 m/s sink, so a dead-stick landing is a
+    // plan, not a prayer.
     const thrust = power * 13.5;
     const turnDrag = this.onGround ? 0 : 0.0022 * Math.sin(this.roll) * Math.sin(this.roll);
-    const drag = (0.0038 + turnDrag) * (1 + 0.003 * wear) * this.speed * this.speed + (this.onGround ? 2.2 : 0);
+    const drag = (0.0038 * (burning ? 1 : 0.22) + turnDrag) * (1 + 0.003 * wear) * this.speed * this.speed + (this.onGround ? 2.2 : 0);
     let accel = thrust - drag - 9.81 * Math.sin(this.pitch);
     if (this.onGround && power === 0) accel -= 3.0; // brakes and grass
     this.speed = Math.max(0, this.speed + accel * dt);

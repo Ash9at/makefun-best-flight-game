@@ -9,9 +9,11 @@ import { STALL_SPEED } from './aircraft.js';
 
 // The weather each sortie flies in: rain and fog for the renderer, a
 // steady wind and a gust multiplier for the flight model. Only the
-// rescue flies in real weather; the rest share the island's fair day.
+// rescue flies in real weather; the night mail flies after dark; the
+// rest share the island's fair day.
 const FAIR = { rain: 0, fog: 0, dusk: false, wind: { x: 0, z: 0, gust: 1 } };
 const STORM = { rain: 0.85, fog: 0.55, dusk: true, wind: { x: -7, z: 3, gust: 2.6 } };
+const NIGHT = { rain: 0, fog: 0.12, dusk: false, night: true, wind: { x: -2, z: 1, gust: 1.15 } };
 
 export const SORTIES = [
   {
@@ -38,6 +40,8 @@ export const SORTIES = [
       'the yellow circle and press SPACE to let a bag go.',
       'The bag keeps your speed and falls — lead the target,',
       'mind the stall, and watch the fuel on the far leg east.',
+      'Low and slow over the circle earns +60 — but low and',
+      'slow is exactly where the stall lives. Your call.',
     ],
     spawn: { x: -520, y: 185, z: 720, yaw: 1.24, speed: 55, throttle: 0.58 },
     weather: FAIR,
@@ -70,12 +74,29 @@ export const SORTIES = [
     weather: STORM,
   },
   {
-    id: 'free',
-    name: 'Free Flight',
-    tagline: 'The island, the plane, no errands',
+    id: 'night',
+    name: 'Sortie 5 — Night Mail',
+    tagline: '2 bags by lantern light, navigating on the panel',
     brief: [
-      'Take off from the strip and fly the island as you like.',
-      'Land back on the strip or the deck whenever you are done.',
+      'The island after dark: two bags, two lantern rings.',
+      'Port Sable green first, then the lighthouse point.',
+      'The strip is lit, the town windows are lit and the',
+      'lighthouse sweeps the water — navigate by the lights,',
+      'fly the panel, and drop low and slow for the bonus.',
+    ],
+    spawn: { x: 300, y: 195, z: 2150, yaw: 0.12, speed: 56, throttle: 0.58 },
+    weather: NIGHT,
+    zones: [DROP_ZONES[0], DROP_ZONES[2]],
+  },
+  {
+    id: 'free',
+    name: 'Free Flight — First Flight',
+    tagline: 'A guided first lap, then the island is yours',
+    brief: [
+      'New to the plane? This sortie teaches her: throttle,',
+      'lift-off, a banked circle of the island, and a landing,',
+      'one prompted step at a time. Old hands can ignore the',
+      'prompts and simply fly — land when you are done.',
     ],
     spawn: { x: -190, y: 16, z: 780, yaw: Math.PI / 2, speed: 0, throttle: 0 },
     weather: FAIR,
@@ -110,11 +131,17 @@ export class Mission {
     this.nextGate = 0;
     this.gateTimes = [];
     this.clockRunning = false;
-    // Mail state.
-    this.bagsLeft = 3;
-    this.bag = null; // {x,y,z,vx,vy,vz}
+    // Mail state. A sortie may name its own zones (the night mail
+    // flies a shorter round); the bag count follows the zones.
+    this.zones = sortie.zones || DROP_ZONES;
+    this.bagsLeft = this.zones.length;
+    this.bag = null; // {x,y,z,vx,vy,vz,releaseAlt,releaseSpeed}
     this.dropScores = [];
     this.zoneIndex = 0;
+    // Free-flight guide state: the prompted first-lap steps.
+    this.guide = 0;
+    this.guideTurn = 0;
+    this.prevYaw = plane.yaw;
     // Carrier state.
     this.judged = false;
     // Rescue state: find the boat, raft away, then get home.
@@ -136,11 +163,11 @@ export class Mission {
         bag: null, zones: null, activeZone: -1,
       };
     }
-    if (this.sortie.id === 'mail') {
+    if (this.sortie.id === 'mail' || this.sortie.id === 'night') {
       return {
         gates: null, gateState: null,
         bag: this.bag,
-        zones: DROP_ZONES, activeZone: this.zoneIndex,
+        zones: this.zones, activeZone: this.zoneIndex,
       };
     }
     if (this.sortie.id === 'rescue') {
@@ -166,12 +193,12 @@ export class Mission {
         ],
       };
     }
-    if (this.sortie.id === 'mail') {
-      const zone = DROP_ZONES[this.zoneIndex];
+    if (this.sortie.id === 'mail' || this.sortie.id === 'night') {
+      const zone = this.zones[this.zoneIndex];
       return {
-        title: 'MAIL DROP',
+        title: this.sortie.id === 'night' ? 'NIGHT MAIL' : 'MAIL DROP',
         lines: [
-          `Bags aboard: ${this.bagsLeft} · delivered ${this.dropScores.length} of 3`,
+          `Bags aboard: ${this.bagsLeft} · delivered ${this.dropScores.length} of ${this.zones.length}`,
           zone ? `Next: ${zone.name} — SPACE to drop` : 'All bags away',
         ],
       };
@@ -190,22 +217,41 @@ export class Mission {
       }[this.raftPhase];
       return { title: 'STORM RESCUE', lines };
     }
+    if (this.sortie.id === 'free') {
+      const steps = [
+        'Step 1 of 4 — W: throttle up, roll down the strip',
+        'Step 2 of 4 — climb away: ease the nose up',
+        'Step 3 of 4 — bank with ← → and circle the island',
+        'Step 4 of 4 — land on the strip or the deck',
+        'All steps flown — the island is yours',
+      ];
+      return {
+        title: 'FREE FLIGHT',
+        lines: [steps[Math.min(this.guide, 4)], 'Land on the strip or deck to finish'],
+      };
+    }
     return { title: 'FREE FLIGHT', lines: ['The island is yours', 'Land on the strip or deck to finish'] };
   }
 
   // SPACE pressed: the mail plane drops a bag, the rescue plane a raft.
   releaseBag(plane) {
     if (this.state !== 'flying' || this.bag) return;
-    if (this.sortie.id === 'mail') {
+    if (this.sortie.id === 'mail' || this.sortie.id === 'night') {
       if (this.bagsLeft <= 0) return;
       const b = plane.basis();
+      const zone = this.zones[this.zoneIndex];
       this.bag = {
         x: plane.x, y: plane.y - 2, z: plane.z,
         vx: b.f.x * plane.speed, vy: b.f.y * plane.speed - 1, vz: b.f.z * plane.speed,
+        // How the drop was flown, for the low-and-slow bonus: a brave
+        // release close to the ground and close to the stall earns
+        // more than a safe high one. Risk priced into the drop.
+        releaseAlt: plane.y - zone.y,
+        releaseSpeed: plane.speed,
       };
       this.bagsLeft--;
       this.sound.drop();
-      this.popup('MAIL AWAY', DROP_ZONES[this.zoneIndex].name);
+      this.popup('MAIL AWAY', zone.name);
     } else if (this.sortie.id === 'rescue' && this.raftPhase === 'find') {
       const b = plane.basis();
       this.bag = {
@@ -227,8 +273,9 @@ export class Mission {
         const g = GATES[this.nextGate];
         return g ? { x: g.x, z: g.z, label: `RING ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
       }
-      case 'mail': {
-        const zn = DROP_ZONES[this.zoneIndex];
+      case 'mail':
+      case 'night': {
+        const zn = this.zones[this.zoneIndex];
         return zn ? { x: zn.x, z: zn.z, label: 'DROP ZONE' } : null;
       }
       case 'carrier':
@@ -266,7 +313,7 @@ export class Mission {
       return;
     }
     if (this.sortie.id === 'gates') this.updateGates(plane);
-    else if (this.sortie.id === 'mail') this.updateMail(dt, plane);
+    else if (this.sortie.id === 'mail' || this.sortie.id === 'night') this.updateMail(dt, plane);
     else if (this.sortie.id === 'carrier') this.updateCarrier(plane, events);
     else if (this.sortie.id === 'rescue') this.updateRescue(dt, plane, events);
     else if (this.sortie.id === 'free') this.updateFree(plane, events);
@@ -317,7 +364,7 @@ export class Mission {
       const bag = this.bag;
       bag.vy -= 9.81 * dt;
       bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
-      const zone = DROP_ZONES[this.zoneIndex];
+      const zone = this.zones[this.zoneIndex];
       if (bag.y <= zone.y + 1) {
         const dist = Math.hypot(bag.x - zone.x, bag.z - zone.z);
         let pts, word;
@@ -325,6 +372,12 @@ export class Mission {
         else if (dist < 30) { pts = 210; word = 'IN THE CIRCLE'; }
         else if (dist < 46) { pts = 120; word = 'EDGE OF THE PAINT'; }
         else { pts = 25; word = `${Math.round(dist)} m away — in the field`; }
+        // The low-and-slow bonus: released under 75 m and under
+        // 46 m/s, the drop was flown bravely, close to the stall.
+        if (bag.releaseAlt < 75 && bag.releaseSpeed < 46) {
+          pts += 60;
+          word += ' · LOW AND SLOW +60';
+        }
         this.dropScores.push(pts);
         this.sound.scored();
         this.popup(word, `${zone.name} · +${pts}`);
@@ -332,10 +385,11 @@ export class Mission {
         this.zoneIndex++;
       }
     }
-    if (this.zoneIndex >= DROP_ZONES.length && !this.bag) {
+    if (this.zoneIndex >= this.zones.length && !this.bag) {
       const dropTotal = this.dropScores.reduce((a, b) => a + b, 0);
       const score = dropTotal + Math.round(plane.fuel) - Math.round(plane.damage * 2);
-      this.finish(Math.max(40, score), 'The post is delivered', [
+      const title = this.sortie.id === 'night' ? 'The night post is delivered' : 'The post is delivered';
+      this.finish(Math.max(40, score), title, [
         `Drops: ${this.dropScores.join(' + ')} = ${dropTotal} points`,
         `Fuel bonus ${Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}`,
         'Land anywhere safe — the flying is done.',
@@ -405,9 +459,28 @@ export class Mission {
   }
 
   updateFree(plane, events) {
+    // The guided first lap: four prompted steps, each announced as it
+    // is flown. Old hands ignore them; the finish is the same either
+    // way — a landing on the strip or the deck after some flying.
+    let dyaw = plane.yaw - this.prevYaw;
+    while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+    while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+    this.prevYaw = plane.yaw;
+    if (!plane.onGround) this.guideTurn += Math.abs(dyaw);
+    if (this.guide === 0 && plane.speed > 32) {
+      this.guide = 1;
+      this.popup('ROLLING', 'ease the nose up as she passes 35 m/s');
+    } else if (this.guide === 1 && !plane.onGround && plane.y > 60) {
+      this.guide = 2;
+      this.popup('AIRBORNE', 'now bank — let the wings do the turning');
+    } else if (this.guide === 2 && this.guideTurn > 5.6) {
+      this.guide = 3;
+      this.popup('A FULL CIRCLE', 'last step: bring her home and land');
+    }
     if (events.touchedDown && (plane.overRunway() || plane.overDeck()) && this.elapsed > 20) {
+      if (this.guide === 3) this.guide = 4;
       this.finish(300 + Math.round(plane.fuel), 'Home again', [
-        'A free flight, ended the way it should be: parked.',
+        this.guide >= 4 ? 'Every step flown: throttle, climb, circle, landing.' : 'A free flight, ended the way it should be: parked.',
         `Fuel left ${Math.round(plane.fuel)}% · damage ${Math.round(plane.damage)}%`,
       ]);
     }

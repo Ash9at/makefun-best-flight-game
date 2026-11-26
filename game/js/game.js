@@ -31,8 +31,16 @@ const sound = new Sound();
 const traffic = new Traffic();
 const pilotLog = new PilotLog();
 let lastWasBest = false;
+// The campaign airframe: damage a sortie ends with is the damage the
+// next one starts with — the plane remembers being bent. A crash
+// writes her off and a fresh airframe is free; a repair on the title
+// screen costs 150 campaign points. Push on bent, or pay: a decision
+// that outlives any single sortie.
+let airframeDamage = 0;
+let repairDebt = 0;
 function recordResult() {
   lastWasBest = pilotLog.record(mission);
+  airframeDamage = plane.crashed ? 0 : Math.round(plane.damage);
 }
 
 let screen = 'title'; // title | brief | fly | done
@@ -64,6 +72,10 @@ addEventListener('keydown', (e) => {
     if (e.code === 'Enter') screen = 'brief';
     if (e.code === 'ArrowUp') selected = (selected + SORTIES.length - 1) % SORTIES.length;
     if (e.code === 'ArrowDown') selected = (selected + 1) % SORTIES.length;
+    if (e.code === 'KeyR' && airframeDamage > 0) {
+      repairDebt += 150;
+      airframeDamage = 0;
+    }
   } else if (screen === 'brief') {
     if (e.code === 'Enter') startSortie(selected);
     if (e.code === 'Escape') screen = 'title';
@@ -94,6 +106,8 @@ function pilotInput() {
 function startSortie(index) {
   selected = index;
   mission = new Mission(SORTIES[index], plane, sound);
+  // The campaign airframe: yesterday's bent wing is today's problem.
+  if (airframeDamage > 0) plane.damage = airframeDamage;
   const w = SORTIES[index].weather.wind;
   plane.wind = { x: w.x, z: w.z, gust: w.gust };
   renderer.cam.follow(plane, 1, true);
@@ -126,8 +140,8 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 330, 84, 660, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('4 sorties · 12 gates · 3 mail drops · 1 storm rescue · 1 carrier · one island', W / 2, 184, 16, '#9fd8ef');
-  panel(W / 2 - 330, 232, 660, 272);
+  text('5 sorties · 12 gates · 5 mail drops · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 16, '#9fd8ef');
+  panel(W / 2 - 330, 232, 660, 292);
   SORTIES.forEach((s, i) => {
     const y = 270 + i * 44;
     if (i === selected) {
@@ -143,8 +157,11 @@ function drawTitle() {
       W / 2 + 288, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
   const camp = pilotLog.campaign(SORTIES);
-  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total} · ↑ ↓ choose · ENTER briefing`, W / 2, 532, 14.5, '#cfe3f2');
-  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 560, 13, '#8fb6cc');
+  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 552, 14.5, '#cfe3f2');
+  if (airframeDamage > 0) {
+    text(`AIRFRAME ${airframeDamage}% DAMAGED — she flies worse until repaired · R repair (−150 pts)`, W / 2, 578, 13.5, '#ffb02e');
+  }
+  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 604, 13, '#8fb6cc');
 }
 
 function drawBrief() {
@@ -153,8 +170,13 @@ function drawBrief() {
   text(s.name, W / 2, 196, 30, '#ffd98a', 'center', 800);
   text(s.tagline, W / 2, 232, 15.5, '#9fd8ef');
   s.brief.forEach((line, i) => text(line, W / 2, 282 + i * 27, 16.5, '#dfeaf4'));
-  text('ENTER — take off', W / 2, 428, 17, '#7de08d');
-  text('ESC — back', W / 2, 452, 13.5, '#8fb6cc');
+  if (airframeDamage > 0) {
+    text(`Airframe ${airframeDamage}% damaged — more drag, softer controls, earlier stall`, W / 2, 440, 14, '#ffb02e');
+    text('ENTER — take off', W / 2, 462, 17, '#7de08d');
+  } else {
+    text('ENTER — take off', W / 2, 428, 17, '#7de08d');
+    text('ESC — back', W / 2, 452, 13.5, '#8fb6cc');
+  }
 }
 
 function drawDone() {
@@ -211,6 +233,11 @@ function frame(now) {
         particles.spawn(plane.x, plane.y + 1, plane.z, { n: 2, speed: 1.5, up: 3, ttl: 1.2, size: 4, color: '60,60,60' });
       }
       mission.update(dt, plane, events);
+      // The stall warning buzzes while the wing is stalled.
+      if (plane.stalled && time - (frame.lastWarn || 0) > 0.55) {
+        frame.lastWarn = time;
+        sound.warn();
+      }
       while (mission.popups.length) {
         const p = mission.popups.shift();
         banner = { text: p.text, sub: p.sub, until: time + 2.4 };
@@ -225,7 +252,7 @@ function frame(now) {
     renderer.cam.follow(plane, dt);
     const sc = mission.scene();
     renderer.render(W, H, { plane, traffic: traffic.plane, time, particles, weather: mission.sortie.weather, ...sc });
-    drawPathMarker(ctx, W, H, plane);
+    drawPathMarker(ctx, W, H, plane, renderer.cam);
     drawInstruments(ctx, W, H, plane, mission.hud(), time);
     if (screen === 'fly' && mission.state === 'flying') {
       const o = mission.objective();
