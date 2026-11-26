@@ -4,21 +4,28 @@
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, CARRIER } from './world.js';
+import { GATES, GATE_RADIUS, DROP_ZONES, CARRIER, rescueBoatPosition } from './world.js';
 import { STALL_SPEED } from './aircraft.js';
+
+// The weather each sortie flies in: rain and fog for the renderer, a
+// steady wind and a gust multiplier for the flight model. Only the
+// rescue flies in real weather; the rest share the island's fair day.
+const FAIR = { rain: 0, fog: 0, dusk: false, wind: { x: 0, z: 0, gust: 1 } };
+const STORM = { rain: 0.85, fog: 0.55, dusk: true, wind: { x: -7, z: 3, gust: 2.6 } };
 
 export const SORTIES = [
   {
     id: 'gates',
     name: 'Sortie 1 — Gate Circuit',
-    tagline: '8 rings around the island, against the clock',
+    tagline: '12 rings around the island, against the clock',
     brief: [
-      'Fly the orange ring, then the next, all eight of them.',
-      'The clock runs from the first ring. Smooth banks beat',
-      'greedy ones: a stalled wing drops you out of the course.',
-      'Land back on the strip afterwards for the full score.',
+      'Fly the orange ring, then the next, all twelve of them.',
+      'The clock runs from the first ring. Rings 4 and 8 hug',
+      'the volcano shoulders and ring 10 grazes the ridge:',
+      'thread those gently, and land home for the full score.',
     ],
     spawn: { x: 0, y: 175, z: 2150, yaw: 0, speed: 58, throttle: 0.6 },
+    weather: FAIR,
   },
   {
     id: 'mail',
@@ -31,11 +38,12 @@ export const SORTIES = [
       'mind the stall, and watch the fuel on the far leg east.',
     ],
     spawn: { x: -520, y: 185, z: 720, yaw: 1.24, speed: 55, throttle: 0.58 },
+    weather: FAIR,
   },
   {
     id: 'carrier',
     name: 'Sortie 3 — Carrier Landing',
-    tagline: 'One deck, 140 metres of it, moving nothing but your nerve',
+    tagline: 'One deck, a yellow box, no second tries',
     brief: [
       'The carrier rides north-west, deck lit and waiting.',
       'Come in slow and flat along her centreline, touch down',
@@ -43,6 +51,21 @@ export const SORTIES = [
       'Too fast or too firm and the deck crew will fish you out.',
     ],
     spawn: { x: -2093, y: 138, z: -384, yaw: 0.6, speed: 52, throttle: 0.45 },
+    weather: FAIR,
+  },
+  {
+    id: 'rescue',
+    name: 'Sortie 4 — Storm Rescue',
+    tagline: 'Find the flare, drop the raft, get home',
+    brief: [
+      'A fishing boat has lost her engine south-east, in the',
+      'storm. Find her by the red flare, fly low and slow,',
+      'and press SPACE to drop the supply raft alongside.',
+      'Then turn for home and land on the strip — in gusts,',
+      'rain and a westerly that pushes you the whole way.',
+    ],
+    spawn: { x: 420, y: 150, z: 2380, yaw: 0.5, speed: 56, throttle: 0.6 },
+    weather: STORM,
   },
   {
     id: 'free',
@@ -53,6 +76,7 @@ export const SORTIES = [
       'Land back on the strip or the deck whenever you are done.',
     ],
     spawn: { x: -190, y: 16, z: 780, yaw: Math.PI / 2, speed: 0, throttle: 0 },
+    weather: FAIR,
   },
 ];
 
@@ -91,6 +115,10 @@ export class Mission {
     this.zoneIndex = 0;
     // Carrier state.
     this.judged = false;
+    // Rescue state: find the boat, raft away, then get home.
+    this.raftPhase = 'find'; // find | away | home
+    this.raftScore = 0;
+    this.boatPos = rescueBoatPosition(0);
   }
 
   popup(text, sub) {
@@ -113,6 +141,15 @@ export class Mission {
         zones: DROP_ZONES, activeZone: this.zoneIndex,
       };
     }
+    if (this.sortie.id === 'rescue') {
+      return {
+        gates: null, gateState: null,
+        bag: this.bag,
+        zones: null, activeZone: -1,
+        rescue: this.boatPos,
+        rescueSignals: this.raftPhase === 'find',
+      };
+    }
     return { gates: null, gateState: null, bag: null, zones: null, activeZone: -1 };
   }
 
@@ -122,8 +159,8 @@ export class Mission {
       return {
         title: 'GATE CIRCUIT',
         lines: [
-          `Ring ${Math.min(this.nextGate + 1, 8)} of 8 · clock ${this.clockRunning ? t + 's' : '—'}`,
-          this.nextGate >= 8 ? 'All rings flown — land on the strip' : 'Follow the orange ring',
+          `Ring ${Math.min(this.nextGate + 1, 12)} of 12 · clock ${this.clockRunning ? t + 's' : '—'}`,
+          this.nextGate >= 12 ? 'All rings flown — land on the strip' : 'Follow the orange ring',
         ],
       };
     }
@@ -143,21 +180,40 @@ export class Mission {
         lines: ['Deck ahead — slow, flat, centred', `Aim sink gentler than 3.6 m/s`],
       };
     }
+    if (this.sortie.id === 'rescue') {
+      const lines = {
+        find: ['Find the red flare — SE offshore, low', 'SPACE drops the raft alongside her'],
+        away: ['Raft is away — turn for home', 'Land on the strip to finish'],
+        home: ['Land on the strip to finish', 'Mind the gusts on final'],
+      }[this.raftPhase];
+      return { title: 'STORM RESCUE', lines };
+    }
     return { title: 'FREE FLIGHT', lines: ['The island is yours', 'Land on the strip or deck to finish'] };
   }
 
-  // SPACE pressed: only the mail plane carries anything to drop.
+  // SPACE pressed: the mail plane drops a bag, the rescue plane a raft.
   releaseBag(plane) {
-    if (this.sortie.id !== 'mail' || this.state !== 'flying') return;
-    if (this.bag || this.bagsLeft <= 0) return;
-    const b = plane.basis();
-    this.bag = {
-      x: plane.x, y: plane.y - 2, z: plane.z,
-      vx: b.f.x * plane.speed, vy: b.f.y * plane.speed - 1, vz: b.f.z * plane.speed,
-    };
-    this.bagsLeft--;
-    this.sound.drop();
-    this.popup('MAIL AWAY', DROP_ZONES[this.zoneIndex].name);
+    if (this.state !== 'flying' || this.bag) return;
+    if (this.sortie.id === 'mail') {
+      if (this.bagsLeft <= 0) return;
+      const b = plane.basis();
+      this.bag = {
+        x: plane.x, y: plane.y - 2, z: plane.z,
+        vx: b.f.x * plane.speed, vy: b.f.y * plane.speed - 1, vz: b.f.z * plane.speed,
+      };
+      this.bagsLeft--;
+      this.sound.drop();
+      this.popup('MAIL AWAY', DROP_ZONES[this.zoneIndex].name);
+    } else if (this.sortie.id === 'rescue' && this.raftPhase === 'find') {
+      const b = plane.basis();
+      this.bag = {
+        x: plane.x, y: plane.y - 2, z: plane.z,
+        vx: b.f.x * plane.speed, vy: b.f.y * plane.speed - 1, vz: b.f.z * plane.speed,
+      };
+      this.raftPhase = 'away';
+      this.sound.drop();
+      this.popup('RAFT AWAY', 'watch it fall — then turn for home');
+    }
   }
 
   finish(score, title, lines) {
@@ -183,6 +239,7 @@ export class Mission {
     if (this.sortie.id === 'gates') this.updateGates(plane);
     else if (this.sortie.id === 'mail') this.updateMail(dt, plane);
     else if (this.sortie.id === 'carrier') this.updateCarrier(plane, events);
+    else if (this.sortie.id === 'rescue') this.updateRescue(dt, plane, events);
     else if (this.sortie.id === 'free') this.updateFree(plane, events);
   }
 
@@ -196,15 +253,15 @@ export class Mission {
         this.nextGate++;
         this.sound.gate();
         this.popup(
-          this.nextGate >= 8 ? 'ALL 8 RINGS FLOWN' : `RING ${this.nextGate} OF 8`,
-          this.nextGate >= 8 ? 'Now land on the strip for the full score' : `split ${this.elapsed.toFixed(1)}s`,
+          this.nextGate >= 12 ? 'ALL 12 RINGS FLOWN' : `RING ${this.nextGate} OF 12`,
+          this.nextGate >= 12 ? 'Now land on the strip for the full score' : `split ${this.elapsed.toFixed(1)}s`,
         );
       }
     } else if (plane.onGround && plane.overRunway() && plane.speed < 4) {
-      const timeScore = Math.max(0, 900 - Math.round(this.elapsed) * 3);
+      const timeScore = Math.max(0, 1150 - Math.round(this.elapsed) * 3);
       const score = timeScore + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2);
       this.finish(Math.max(60, score), 'Circuit complete — and home again', [
-        `Course time ${this.elapsed.toFixed(1)}s over 8 rings`,
+        `Course time ${this.elapsed.toFixed(1)}s over 12 rings`,
         `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}`,
       ]);
     }
@@ -259,6 +316,45 @@ export class Mission {
       this.finish(220, 'Diverted to the strip', [
         'A safe landing ashore: 220 points.',
         'The deck wanted you, but the island caught you.',
+      ]);
+    }
+  }
+
+  updateRescue(dt, plane, events) {
+    this.boatPos = rescueBoatPosition(this.elapsed);
+    if (this.bag) {
+      // The raft falls like a mail bag, but the sea decides the score.
+      const bag = this.bag;
+      bag.vy -= 9.81 * dt;
+      bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
+      if (bag.y <= 1.2) {
+        const dist = Math.hypot(bag.x - this.boatPos.x, bag.z - this.boatPos.z);
+        let word;
+        if (dist < 14) { this.raftScore = 420; word = 'RIGHT ALONGSIDE'; }
+        else if (dist < 28) { this.raftScore = 320; word = 'CLOSE ENOUGH TO THROW A LINE'; }
+        else if (dist < 46) { this.raftScore = 190; word = 'IN THE RING — THEY CAN REACH IT'; }
+        else { this.raftScore = 60; word = `${Math.round(dist)} m off — the sea has it now`; }
+        this.sound.scored();
+        this.popup(word, `raft +${this.raftScore} · now get home`);
+        this.bag = null;
+        this.raftPhase = 'home';
+      }
+    }
+    if (this.raftPhase === 'home' && plane.onGround && plane.overRunway() && plane.speed < 4) {
+      const home = 260 + Math.round(plane.fuel) - Math.round(plane.damage * 2);
+      const score = this.raftScore + home;
+      this.finish(Math.max(60, score), 'Home through the storm', [
+        `Raft ${this.raftScore} points · the boat's crew has their supplies`,
+        `Home bonus ${260 + Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}`,
+        'Somewhere south-east, a flare goes up in thanks.',
+      ]);
+    }
+    if (events.touchedDown && plane.overDeck() && this.raftPhase === 'home') {
+      // A deck landing in a storm counts as home, and then some.
+      const score = this.raftScore + 340 + Math.round(plane.fuel) - Math.round(plane.damage * 2);
+      this.finish(Math.max(60, score), 'On the deck — in THAT weather', [
+        `Raft ${this.raftScore} points · deck bonus in a storm`,
+        'The carrier crew will be telling this one for weeks.',
       ]);
     }
   }

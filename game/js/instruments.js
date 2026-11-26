@@ -171,8 +171,11 @@ export function drawInstruments(ctx, w, h, plane, mission, time) {
     gaugeBar(ctx, gx, h - 28, gw, 'DAMAGE', plane.damage / 100, RED, `${Math.round(plane.damage)}%`);
   }
 
-  // A small compass-rose reminder of where the strip lies, bottom right.
-  label(ctx, `WIND CALM · ISLAND TIME ${new Date(0, 0, 0, 0, 0, Math.floor(time) % 3600).toTimeString().slice(3, 8)}`, w - 130, h - 24, 10.5, 'rgba(200,225,245,0.75)');
+  // The wind the sortie actually flies in, bottom right: calm on a fair
+  // day, a number and a warning when the weather is a decision.
+  const windSpd = Math.hypot(plane.wind.x, plane.wind.z);
+  const windTxt = windSpd < 0.5 ? 'WIND CALM' : `WIND ${Math.round(windSpd)} M/S${plane.wind.gust > 1.2 ? ' · GUSTING' : ''}`;
+  label(ctx, `${windTxt} · ISLAND TIME ${new Date(0, 0, 0, 0, 0, Math.floor(time) % 3600).toTimeString().slice(3, 8)}`, w - 130, h - 24, 10.5, windSpd < 0.5 ? 'rgba(200,225,245,0.75)' : '#ffb02e');
 
   // The sortie card, top left: what you are doing and how it is going.
   if (mission) {

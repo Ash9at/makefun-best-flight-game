@@ -22,6 +22,46 @@ const particles = new Particles();
 const plane = new Aircraft();
 const sound = new Sound();
 
+// The other mail plane: it flies its own circuit of the island all day,
+// in the menus and in every sortie, and never once lands. Waypoints are
+// (x, z) around the island at a safe, scenic height.
+const traffic = new Aircraft();
+traffic.reset({ x: 1900, y: 285, z: 300, yaw: -1.2, speed: 58, throttle: 0.62 });
+const TRAFFIC_ROUTE = [[600, -1900], [-1900, -400], [-700, 1900], [1900, 300]];
+let trafficLeg = 0;
+function stepTraffic(dt) {
+  const [tx, tz] = TRAFFIC_ROUTE[trafficLeg];
+  const dx = tx - traffic.x, dz = tz - traffic.z;
+  if (Math.hypot(dx, dz) < 240) trafficLeg = (trafficLeg + 1) % TRAFFIC_ROUTE.length;
+  let headErr = Math.atan2(dx, -dz) - traffic.yaw;
+  while (headErr > Math.PI) headErr -= Math.PI * 2;
+  while (headErr < -Math.PI) headErr += Math.PI * 2;
+  traffic.throttle = 0.62;
+  traffic.step(dt, {
+    roll: Math.max(-0.55, Math.min(0.55, headErr * 1.3)),
+    pitch: Math.max(-0.5, Math.min(0.5, (285 - traffic.y) * 0.012 - traffic.vspeed * 0.02)),
+    throttleDelta: 0,
+    rudder: 0,
+  }, time);
+}
+
+// The pilot log: best score and rank per sortie, kept in memory for
+// the session (the hosted page may not store anything), shown on the
+// campaign board that the title screen has become.
+const pilotLog = {}; // sortie id -> {best, rank, plays}
+let lastWasBest = false;
+function recordResult() {
+  const id = mission.sortie.id;
+  const entry = pilotLog[id] || (pilotLog[id] = { best: 0, rank: '—', plays: 0 });
+  entry.plays++;
+  lastWasBest = false;
+  if (mission.state === 'complete' && mission.result.score > entry.best) {
+    entry.best = mission.result.score;
+    entry.rank = mission.result.rank;
+    lastWasBest = true;
+  }
+}
+
 let screen = 'title'; // title | brief | fly | done
 let selected = 0; // sortie index on the title screen
 let mission = null;
@@ -94,6 +134,8 @@ function pilotInput() {
 function startSortie(index) {
   selected = index;
   mission = new Mission(SORTIES[index], plane, sound);
+  const w = SORTIES[index].weather.wind;
+  plane.wind = { x: w.x, z: w.z, gust: w.gust };
   renderer.cam.follow(plane, 1, true);
   menuArmed = false;
   demoHold = null;
@@ -122,23 +164,28 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 }
 
 function drawTitle() {
-  panel(W / 2 - 330, 88, 660, 128);
-  text('SKYWARD POST', W / 2, 138, 52, '#ffd98a', 'center', 800);
-  text('3 sorties · 8 gates · 3 mail drops · 1 carrier · one island', W / 2, 188, 16.5, '#9fd8ef');
-  panel(W / 2 - 330, 244, 660, 218);
+  panel(W / 2 - 330, 84, 660, 128);
+  text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
+  text('4 sorties · 12 gates · 3 mail drops · 1 storm rescue · 1 carrier · one island', W / 2, 184, 16, '#9fd8ef');
+  panel(W / 2 - 330, 232, 660, 272);
   SORTIES.forEach((s, i) => {
-    const y = 282 + i * 46;
+    const y = 270 + i * 44;
     if (i === selected) {
       ctx.fillStyle = 'rgba(255, 217, 138, 0.16)';
       ctx.beginPath();
-      ctx.roundRect(W / 2 - 306, y - 19, 612, 38, 8);
+      ctx.roundRect(W / 2 - 306, y - 19, 612, 40, 8);
       ctx.fill();
     }
-    text(`${i + 1}  ${s.name}`, W / 2 - 288, y, 19, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
-    text(s.tagline, W / 2 - 288, y + 0, 13.5, '#8fb6cc', 'right');
+    text(`${i + 1}  ${s.name}`, W / 2 - 288, y - 4, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
+    text(s.tagline, W / 2 + 288, y - 4, 12.5, '#8fb6cc', 'right');
+    const log = pilotLog[s.id];
+    text(log ? `BEST ${log.best} · RANK ${log.rank} · flown ${log.plays}×` : '— not flown yet —',
+      W / 2 + 288, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
-  text('↑ ↓ choose · ENTER briefing', W / 2, 500, 15, '#cfe3f2');
-  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop mail · P pause', W / 2, 528, 13.5, '#8fb6cc');
+  const flown = SORTIES.filter((s) => pilotLog[s.id]).length;
+  const total = SORTIES.reduce((sum, s) => sum + (pilotLog[s.id] ? pilotLog[s.id].best : 0), 0);
+  text(`CAMPAIGN — ${flown} of ${SORTIES.length} sorties flown · best total ${total} · ↑ ↓ choose · ENTER briefing`, W / 2, 532, 14.5, '#cfe3f2');
+  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 560, 13, '#8fb6cc');
 }
 
 function drawBrief() {
@@ -162,6 +209,7 @@ function drawDone() {
     text(`${r.score}`, W / 2 - 70, 420, 40, '#ffd98a', 'right', 800);
     text('points', W / 2 - 58, 428, 15, '#9fd8ef', 'left');
     text(`RANK ${r.rank}`, W / 2 + 90, 420, 40, '#7de08d', 'left', 800);
+    if (lastWasBest) text('★ NEW BEST — the log book is updated', W / 2, 388, 15, '#ffd98a');
   }
   text('ENTER — back to the island', W / 2, 466, 14.5, '#8fb6cc');
 }
@@ -184,8 +232,9 @@ function frame(now) {
     demoHold = { heading: plane.yaw + 0.32, alt: 300 };
     const input = autopilotInput();
     plane.step(dt, input, time);
+    stepTraffic(dt);
     renderer.cam.follow(plane, dt);
-    renderer.render(W, H, { plane, time, gates: null, gateState: null, zones: null, activeZone: -1, bag: null, particles });
+    renderer.render(W, H, { plane, traffic, time, gates: null, gateState: null, zones: null, activeZone: -1, bag: null, particles });
   } else if (screen === 'fly' || screen === 'done') {
     if (screen === 'fly' && !paused) {
       const input = demoHold ? autopilotInput() : pilotInput();
@@ -202,12 +251,16 @@ function frame(now) {
         const p = mission.popups.shift();
         banner = { text: p.text, sub: p.sub, until: time + 2.4 };
       }
-      if (mission.state !== 'flying') screen = 'done';
+      if (mission.state !== 'flying') {
+        recordResult();
+        screen = 'done';
+      }
     }
+    stepTraffic(dt);
     particles.step(dt);
     renderer.cam.follow(plane, dt);
     const sc = mission.scene();
-    renderer.render(W, H, { plane, time, particles, ...sc });
+    renderer.render(W, H, { plane, traffic, time, particles, weather: mission.sortie.weather, ...sc });
     drawPathMarker(ctx, W, H, plane);
     drawInstruments(ctx, W, H, plane, mission.hud(), time);
     if (banner && time < banner.until) {
@@ -236,6 +289,15 @@ window.SKYPOST = {
   },
   hold: (heading, alt) => { demoHold = { heading, alt }; },
   release: () => { if (mission) mission.releaseBag(plane); },
+  mission: () => (mission ? {
+    id: mission.sortie.id, state: mission.state, nextGate: mission.nextGate,
+    bagsLeft: mission.bagsLeft, drops: mission.dropScores.length,
+    raftPhase: mission.raftPhase, raftScore: mission.raftScore,
+    score: mission.result ? mission.result.score : null,
+    wind: plane.wind, fuel: Math.round(plane.fuel), damage: Math.round(plane.damage),
+    traffic: { x: Math.round(traffic.x), y: Math.round(traffic.y), z: Math.round(traffic.z) },
+    log: pilotLog,
+  } : null),
   state: () => ({ screen, x: plane.x, y: plane.y, z: plane.z, yaw: plane.yaw, speed: plane.speed, crashed: plane.crashed }),
   cam: () => ({
     pos: [renderer.cam.x, renderer.cam.y, renderer.cam.z],

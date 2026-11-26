@@ -1,4 +1,4 @@
-# Skyward Post — 3 sorties, 8 gates, 3 mail drops, 1 carrier, one island
+# Skyward Post — 4 sorties, 12 gates, 3 mail drops, 1 storm rescue, 1 carrier, one island
 
 [![best-flight-game-20261126-0057 on make.fun](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
 [![rank](https://make.fun/badge/best-flight-game-20261126-0057/Ash9at/makefun-best-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
@@ -8,10 +8,13 @@ An original chase-view flight game for the make.fun [best flight game](https://m
 
 ## The sorties
 
-1. **Gate Circuit** — 8 rings around the island against the clock; the clock starts at the first ring, and the full score needs a landing back on the strip.
+1. **Gate Circuit** — 12 rings around the island against the clock; the clock starts at the first ring, and the full score needs a landing back on the strip. Rings 4 and 8 hug the volcano's shoulders and ring 10 grazes the south-west ridge, so the route alternates high cruising with thread-the-needle flying.
 2. **Mail Drop** — 3 mail bags for 3 painted circles (the town green, the south farm, the lighthouse point). Bags keep the plane's speed and fall under a canopy: lead the target, score by the metre.
 3. **Carrier Landing** — one 300 m deck, a yellow touchdown box, judged on centreline deviation, touchdown zone and sink rate.
-4. **Free Flight** — take off from the strip and fly the island as you like.
+4. **Storm Rescue** — a fishing boat dead in a dusk storm south-east of the island. Weather is a system here, not a skin: rain, fog, a steady westerly drift and gusts that shove the nose and rock the wings. Find her by her red flare, drop the supply raft alongside (scored by the metre), then get home and land — on the strip, or, bravely, on the deck.
+5. **Free Flight** — take off from the strip and fly the island as you like.
+
+The island is alive while you fly it: fishing boats steam their routes offshore, birds work the thermals off the cone, and a second mail plane flies its own circuit all day. A pilot log on the title screen keeps your best score and rank per sortie and the campaign total for the session.
 
 Flying rewards discipline: banks make the turns, speed makes the lift, and below the 27 m/s stall the nose drops and the airframe buffets. Fuel burns with the throttle and hard arrivals bend the plane — damage and an empty tank both turn a sortie into decisions.
 
@@ -44,10 +47,10 @@ node -e "require('http').createServer((q,r)=>{const fs=require('fs');const p=q.u
 
 Every file has one job, and the names say which:
 
-- `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, scenery.
-- `game/js/renderer.js` — the hand-rolled 3D projector: chase camera, terrain, carrier, rings, and the polygon-built mail plane.
-- `game/js/aircraft.js` — the flight model: throttle, coordinated turns, stall, fuel, damage, landing and crash judgement.
-- `game/js/missions.js` — the three sorties and free flight: objectives, scoring, debriefs.
+- `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, scenery, and the living traffic of boats and birds.
+- `game/js/renderer.js` — the hand-rolled 3D projector: chase camera, terrain, carrier, rings, boats, weather (storm sky, fog, rain, the rescue flare), and the polygon-built mail plane.
+- `game/js/aircraft.js` — the flight model: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
+- `game/js/missions.js` — the four sorties and free flight: objectives, weather, scoring, debriefs.
 - `game/js/instruments.js` — the HUD: tapes, horizon, gauges, banners.
 - `game/js/audio.js` — the synthesised engine, wind and chimes.
 - `game/js/game.js` — boot, keyboard, screens (title, briefing, flying, debrief) and the frame loop.

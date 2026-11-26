@@ -5,7 +5,7 @@
 // flat-shaded polygons are painted far to near. The terrain grid colours
 // are precomputed in world.js, so a frame is projection and fills only.
 
-import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, groundHeight } from './world.js';
+import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight } from './world.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
@@ -177,7 +177,7 @@ export class Renderer {
     this.cells = []; // scratch: visible terrain cells per frame
   }
 
-  drawSkyAndSea(w, h) {
+  drawSkyAndSea(w, h, storm = false) {
     const ctx = this.ctx;
     const cam = this.cam;
     // Where does the horizon fall on screen?
@@ -185,19 +185,31 @@ export class Renderer {
     let hy = horizon ? horizon.y : h / 2;
     hy = clamp(hy, -h * 0.4, h * 1.2);
     const sky = ctx.createLinearGradient(0, -h * 0.2, 0, Math.max(hy, 1));
-    sky.addColorStop(0, '#2d5a8f');
-    sky.addColorStop(0.55, '#7db1dd');
-    sky.addColorStop(1, '#dceef8');
+    if (storm) {
+      sky.addColorStop(0, '#232f3a');
+      sky.addColorStop(0.55, '#54626d');
+      sky.addColorStop(1, '#93a3ab');
+    } else {
+      sky.addColorStop(0, '#2d5a8f');
+      sky.addColorStop(0.55, '#7db1dd');
+      sky.addColorStop(1, '#dceef8');
+    }
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, w, Math.max(hy, 0));
     const sea = ctx.createLinearGradient(0, Math.max(hy, 0), 0, h);
-    sea.addColorStop(0, '#7fa8bd');
-    sea.addColorStop(0.25, '#3f7296');
-    sea.addColorStop(1, '#27536f');
+    if (storm) {
+      sea.addColorStop(0, '#5d6f76');
+      sea.addColorStop(0.25, '#33454f');
+      sea.addColorStop(1, '#1d2c36');
+    } else {
+      sea.addColorStop(0, '#7fa8bd');
+      sea.addColorStop(0.25, '#3f7296');
+      sea.addColorStop(1, '#27536f');
+    }
     ctx.fillStyle = sea;
     ctx.fillRect(0, Math.max(hy, 0), w, h - Math.max(hy, 0));
-    // The sun, when it is in front of the camera.
-    const sun = cam.project(cam.x + SUN.x * 5000, cam.y + SUN.y * 5000, cam.z + SUN.z * 5000, w, h);
+    // The sun, when it is in front of the camera (a storm swallows it).
+    const sun = storm ? null : cam.project(cam.x + SUN.x * 5000, cam.y + SUN.y * 5000, cam.z + SUN.z * 5000, w, h);
     if (sun) {
       const g = ctx.createRadialGradient(sun.x, sun.y, 4, sun.x, sun.y, 130);
       g.addColorStop(0, 'rgba(255,246,214,0.95)');
@@ -220,7 +232,7 @@ export class Renderer {
     for (const { q, c } of sorted) {
       const r = c.s * q.s;
       if (r < 6) continue;
-      ctx.fillStyle = 'rgba(255,255,255,0.78)';
+      ctx.fillStyle = this.storm ? 'rgba(150,160,168,0.9)' : 'rgba(255,255,255,0.78)';
       for (const [ox, oy, orr] of [[0, 0, 1], [-0.7, 0.14, 0.66], [0.72, 0.16, 0.6], [0.1, -0.3, 0.55]]) {
         ctx.beginPath();
         ctx.ellipse(q.x + ox * r, q.y + oy * r * 0.4, r * orr, r * orr * 0.36, 0, 0, Math.PI * 2);
@@ -241,7 +253,8 @@ export class Renderer {
         const cz = -extent + (j + 0.5) * cell;
         const dx = cx - cam.x, dz = cz - cam.z;
         const depth = dx * cam.f.x + dz * cam.f.z;
-        if (depth < -140 || depth > 4600) continue;
+        const far = 4600 * (1 - 0.58 * (this.fog || 0)); // weather closes the world in
+        if (depth < -140 || depth > far) continue;
         const side = dx * cam.r.x + dz * cam.r.z;
         if (Math.abs(side) > depth * 1.15 + 500) continue;
         cells.push({ i, j, depth });
@@ -566,20 +579,184 @@ export class Renderer {
     ctx.strokeRect(p.x - s / 2, p.y - s / 2, s, s);
   }
 
-  // The whole world in one call. scene: {plane, gates states, zones,
-  // activeZone, bag, particles, showAircraft}
+  // A fishing boat on the sea: hull, cabin, mast and a foam wake. The
+  // distressed variant rides lower, lists, and trails engine smoke.
+  drawBoat(w, h, x, z, heading, time, distressed = false) {
+    const ctx = this.ctx;
+    const cam = this.cam;
+    const c = Math.cos(heading), s = Math.sin(heading);
+    const toWorld = (lx, lz) => ({ x: x + lx * c - lz * s, z: z + lx * s + lz * c });
+    if (!distressed) {
+      // The wake: a pale fan spreading behind the stern.
+      const stern = toWorld(0, -10);
+      const tipL = toWorld(-6, -36);
+      const tipR = toWorld(6, -36);
+      const pts = [stern, tipL, tipR].map((p) => cam.project(p.x, 0.35, p.z, w, h));
+      if (!pts.some((p) => !p)) {
+        ctx.fillStyle = 'rgba(235,245,248,0.35)';
+        ctx.beginPath();
+        ctx.moveTo(pts[0].x, pts[0].y);
+        ctx.lineTo(pts[1].x, pts[1].y);
+        ctx.lineTo(pts[2].x, pts[2].y);
+        ctx.closePath();
+        ctx.fill();
+      }
+    }
+    const ride = distressed ? 0.1 : 0.9;
+    drawBox(ctx, cam, w, h, x, ride, z, 3.1, 1.5, 11, heading, {
+      top: shade([196, 90, 60], null, 0.5), side: shade([150, 62, 44], null, 0), end: shade([120, 50, 36], null, -0.3),
+    });
+    drawBox(ctx, cam, w, h, x, ride + 2.2, z, 2.1, 1.1, 4.5, heading, {
+      top: shade([232, 230, 222], null, 0.7), side: shade([206, 204, 196], null, 0.1), end: shade([178, 176, 168], null, -0.2),
+    });
+    const mastBase = cam.project(x, ride + 3.2, z, w, h);
+    const mastTop = cam.project(x, ride + 10, z, w, h);
+    if (mastBase && mastTop) {
+      ctx.strokeStyle = '#4a4238';
+      ctx.lineWidth = Math.max(1, mastBase.s * 0.22);
+      ctx.beginPath(); ctx.moveTo(mastBase.x, mastBase.y); ctx.lineTo(mastTop.x, mastTop.y); ctx.stroke();
+    }
+    if (distressed) {
+      // A lazy column of dark smoke from the dead engine, blown west.
+      for (let k = 0; k < 6; k++) {
+        const age = ((time * 0.45 + k / 6) % 1);
+        const px = x - age * 26, py = ride + 3 + age * 34, pz = z + age * 10;
+        const q = cam.project(px, py, pz, w, h);
+        if (!q) continue;
+        ctx.fillStyle = `rgba(38,38,40,${(0.4 * (1 - age)).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, Math.max(2, (3 + age * 13) * q.s * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+
+  // The distress flare over the rescue boat: a pulsing ring on the water
+  // where the raft must land, a masthead light, and every few seconds a
+  // red flare arcing into the murk — the thing the pilot navigates by.
+  drawRescueSignals(w, h, bx, bz, time) {
+    const ctx = this.ctx;
+    const cam = this.cam;
+    const SEG = 22;
+    const pulse = 0.65 + 0.35 * Math.sin(time * 3.2);
+    ctx.strokeStyle = `rgba(255,84,60,${(0.85 * pulse).toFixed(3)})`;
+    let prev = null;
+    for (let i = 0; i <= SEG; i++) {
+      const a = (i / SEG) * Math.PI * 2;
+      const p = cam.project(bx + Math.cos(a) * DROP_RADIUS, 0.7, bz + Math.sin(a) * DROP_RADIUS, w, h);
+      if (!p) { prev = null; continue; }
+      if (prev) {
+        ctx.lineWidth = Math.max(1.5, p.s * 0.8);
+        ctx.beginPath(); ctx.moveTo(prev.x, prev.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      }
+      prev = p;
+    }
+    // The arcing flare itself: up, hang, fall, dark, again.
+    const phase = time % 8;
+    if (phase < 3.2) {
+      const fx = bx + phase * 11, fz = bz - phase * 6;
+      const fy = 8 + phase * 44 - phase * phase * 10.5;
+      const q = cam.project(fx, fy, fz, w, h);
+      if (q) {
+        const g = ctx.createRadialGradient(q.x, q.y, 1, q.x, q.y, 34);
+        g.addColorStop(0, 'rgba(255,120,80,0.95)');
+        g.addColorStop(0.3, 'rgba(255,70,45,0.55)');
+        g.addColorStop(1, 'rgba(255,70,45,0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(q.x - 36, q.y - 36, 72, 72);
+        ctx.fillStyle = '#ffd9c9';
+        ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.6, q.s * 0.35), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    // The masthead light, blinking through the rain.
+    if (Math.sin(time * 3.2) > -0.2) {
+      const q = cam.project(bx, 11, bz, w, h);
+      if (q) {
+        ctx.fillStyle = 'rgba(255,190,90,0.9)';
+        ctx.beginPath(); ctx.arc(q.x, q.y, Math.max(1.4, q.s * 0.3), 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Island birds: dark chevrons riding the thermals, wings flapping.
+  drawBirds(w, h, time) {
+    const ctx = this.ctx;
+    const cam = this.cam;
+    ctx.strokeStyle = 'rgba(28,34,38,0.85)';
+    ctx.lineWidth = 1.6;
+    for (const flock of FLOCKS) {
+      for (let i = 0; i < flock.n; i++) {
+        const b = birdPosition(flock, i, time);
+        const q = cam.project(b.x, b.y, b.z, w, h);
+        if (!q || q.z > 2400) continue;
+        const half = Math.max(2.5, 1.15 * q.s);
+        const lift = Math.sin(b.flap) * half * 0.55;
+        ctx.beginPath();
+        ctx.moveTo(q.x - half, q.y - lift);
+        ctx.lineTo(q.x, q.y + half * 0.22);
+        ctx.lineTo(q.x + half, q.y - lift);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Rain, screen-space: slanted streaks blown by the sortie's wind.
+  drawRain(w, h, intensity, time) {
+    const ctx = this.ctx;
+    const n = Math.floor(170 * intensity);
+    if (n <= 0) return;
+    ctx.strokeStyle = 'rgba(205,222,232,0.34)';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++) {
+      const hash = Math.abs(Math.sin(i * 127.1 + 311.7) * 43758.5453) % 1;
+      const hash2 = Math.abs(Math.sin(i * 269.5 + 183.3) * 28001.8384) % 1;
+      const x = ((hash + time * 0.13 * (0.5 + hash2)) % 1.2 - 0.1) * w;
+      const y = ((hash2 + time * (1.5 + hash * 0.7)) % 1.1 - 0.05) * h;
+      const len = 13 + hash * 15;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - len * 0.36, y + len);
+    }
+    ctx.stroke();
+  }
+
+  // The whole world in one call. scene: {plane, traffic, gates states,
+  // zones, activeZone, bag, particles, showAircraft, weather, rescue}
   render(w, h, scene) {
+    const weather = scene.weather || { rain: 0, dusk: false, fog: 0 };
+    this.storm = !!weather.dusk;
+    this.fog = weather.fog || 0;
     this.cam.focal = h * 0.92;
-    this.drawSkyAndSea(w, h);
+    this.drawSkyAndSea(w, h, this.storm);
     this.drawClouds(w, h);
     this.drawTerrain(w, h);
     this.drawRunway(w, h);
     this.drawCarrier(w, h);
+    for (const b of BOATS) {
+      const p = boatPosition(b, scene.time);
+      this.drawBoat(w, h, p.x, p.z, p.heading, scene.time, false);
+    }
+    if (scene.rescue) this.drawBoat(w, h, scene.rescue.x, scene.rescue.z, scene.rescue.heading, scene.time, true);
     this.drawScenery(w, h);
+    this.drawBirds(w, h, scene.time);
     if (scene.zones) scene.zones.forEach((z, i) => this.drawDropZone(w, h, z, i === scene.activeZone));
     if (scene.gates) scene.gates.forEach((g, i) => this.drawGate(w, h, g, scene.gateState(i)));
+    if (scene.rescue && scene.rescueSignals) this.drawRescueSignals(w, h, scene.rescue.x, scene.rescue.z, scene.time);
     if (scene.bag) this.drawBag(w, h, scene.bag);
     if (scene.particles) scene.particles.draw(this.ctx, this.cam, w, h);
+    if (scene.traffic) this.drawAircraft(w, h, scene.traffic, scene.time);
     if (scene.plane && scene.showAircraft !== false) this.drawAircraft(w, h, scene.plane, scene.time);
+    if (this.storm) {
+      // Dusk gloom over the whole world, then the rain in front of it.
+      this.ctx.fillStyle = 'rgba(30,40,56,0.20)';
+      this.ctx.fillRect(0, 0, w, h);
+    }
+    if (weather.rain > 0) {
+      if (weather.fog > 0) {
+        this.ctx.fillStyle = `rgba(146,162,170,${(weather.fog * 0.30).toFixed(3)})`;
+        this.ctx.fillRect(0, 0, w, h);
+      }
+      this.drawRain(w, h, weather.rain, scene.time);
+    }
   }
 }

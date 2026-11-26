@@ -160,16 +160,24 @@ function buildScenery() {
 }
 
 // --- The course furniture ----------------------------------------------
-// Eight rings for the Gate Circuit, flown in order around the island.
+// Twelve rings for the Gate Circuit, flown in order around the island.
+// Rings 4 and 8 hug the volcano's shoulders (their centres sit barely
+// 35 m over the slope) and ring 10 grazes the south-west ridge: those
+// three are thread-the-needle rings, and the routing between the high
+// cruising rings and the low ones is part of the flying.
 export const GATES = [
   { x: 0, y: 120, z: 1150, yaw: 0 },
   { x: 950, y: 150, z: 700, yaw: 0.9 },
   { x: 1350, y: 190, z: -250, yaw: 1.8 },
+  { x: 520, y: 172, z: -420, yaw: 2.3 },
   { x: 800, y: 230, z: -1150, yaw: 2.6 },
   { x: -150, y: 260, z: -1450, yaw: 3.4 },
   { x: -1050, y: 200, z: -800, yaw: 4.2 },
+  { x: -500, y: 170, z: -250, yaw: 4.7 },
   { x: -1350, y: 150, z: 250, yaw: 5.1 },
   { x: -700, y: 120, z: 1000, yaw: 5.8 },
+  { x: -150, y: 100, z: 1420, yaw: 6.0 },
+  { x: 450, y: 140, z: 1150, yaw: 0.4 },
 ];
 export const GATE_RADIUS = 58;
 
@@ -181,6 +189,58 @@ export const DROP_ZONES = [
 ];
 export const DROP_RADIUS = 46;
 for (const zone of DROP_ZONES) zone.y = groundHeight(zone.x, zone.z);
+
+// --- Living water and air ----------------------------------------------
+// Fishing boats putting along slow circular routes offshore. Their
+// positions are pure functions of the clock, so every frame and every
+// machine agrees where they are.
+export const BOATS = [
+  { cx: 1750, cz: 500, r: 300, speed: 0.021, phase: 0.6, dir: 1 },
+  { cx: -1850, cz: -450, r: 340, speed: 0.016, phase: 2.9, dir: -1 },
+  { cx: 500, cz: 1950, r: 260, speed: 0.024, phase: 4.4, dir: 1 },
+];
+
+// Where a boat is at time t, and the heading it steams on (the yaw
+// whose local +z axis, as drawBox turns it, points along the motion).
+export function boatPosition(boat, t) {
+  const a = boat.phase + t * boat.speed * boat.dir;
+  const x = boat.cx + Math.cos(a) * boat.r;
+  const z = boat.cz + Math.sin(a) * boat.r;
+  const vx = -Math.sin(a) * boat.dir;
+  const vz = Math.cos(a) * boat.dir;
+  return { x, z, heading: Math.atan2(-vx, vz) };
+}
+
+// The distressed boat of the Storm Rescue: engine dead south-east of the
+// island, drifting in a slow, small circle on the swell, firing flares.
+export const RESCUE_BOAT = { cx: 1520, cz: 1560, r: 26, speed: 0.05, phase: 1.2, dir: 1 };
+
+export function rescueBoatPosition(t) {
+  const a = RESCUE_BOAT.phase + t * RESCUE_BOAT.speed;
+  return {
+    x: RESCUE_BOAT.cx + Math.cos(a) * RESCUE_BOAT.r,
+    z: RESCUE_BOAT.cz + Math.sin(a) * RESCUE_BOAT.r,
+    heading: a + 0.8,
+  };
+}
+
+// Two flocks of island birds working the thermals off the cone. Each
+// bird rides the flock's circle with its own offset and flap phase.
+export const FLOCKS = [
+  { cx: 260, cy: 265, cz: -180, r: 150, speed: 0.11, phase: 0, n: 7 },
+  { cx: -620, cy: 210, cz: 480, r: 190, speed: 0.09, phase: 2.4, n: 6 },
+];
+
+export function birdPosition(flock, i, t) {
+  const a = flock.phase + t * flock.speed + i * 0.42;
+  const rr = flock.r + Math.sin(i * 2.7) * 26;
+  return {
+    x: flock.cx + Math.cos(a) * rr,
+    y: flock.cy + Math.sin(t * 0.9 + i * 1.7) * 7 + (i % 3) * 6,
+    z: flock.cz + Math.sin(a) * rr,
+    flap: t * 7 + i * 1.3,
+  };
+}
 
 buildGrid();
 buildScenery();

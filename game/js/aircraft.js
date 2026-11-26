@@ -32,6 +32,10 @@ export class Aircraft {
     this.buffet = 0;
     this.propPhase = 0;
     this.gear = 1.9; // metres from the centre to the wheels
+    // The weather the sortie flies in: a steady drift (m/s) and a gust
+    // multiplier on the island's own turbulence. Calm is {0, 0, 1}; the
+    // game sets this from the sortie after every reset.
+    this.wind = { x: 0, z: 0, gust: 1 };
   }
 
   // Orthonormal basis of the airframe: forward, right, up.
@@ -118,9 +122,23 @@ export class Aircraft {
     this.y += f.y * this.speed * dt;
     this.z += f.z * this.speed * dt;
     if (this.stalled) this.y -= (STALL_SPEED - this.speed) * 0.42 * dt;
-    // Gentle gusting over the island, stronger down low.
-    const gust = Math.sin(time * 0.7 + this.x * 0.002) * Math.sin(time * 1.13 + this.z * 0.0016);
-    if (!this.onGround && this.y < 260) this.y += gust * 1.4 * dt;
+    if (!this.onGround) {
+      // The sortie's steady wind drifts the whole air mass, plane and all.
+      this.x += this.wind.x * dt;
+      this.z += this.wind.z * dt;
+      // Gusting over the island, stronger down low — and as wild as the
+      // sortie's weather says. In a storm the gusts also shove the nose
+      // and rock the wings, so the pilot flies the plane, not the plan.
+      const gust = Math.sin(time * 0.7 + this.x * 0.002) * Math.sin(time * 1.13 + this.z * 0.0016);
+      const g = this.wind.gust;
+      if (this.y < 260) this.y += gust * 1.4 * g * dt;
+      if (g > 1.2) {
+        const kick = Math.sin(time * 1.9 + this.z * 0.001) * Math.sin(time * 0.83 + this.x * 0.0013);
+        this.y += kick * (g - 1) * 2.6 * dt;
+        this.roll += Math.sin(time * 2.3 + 1.7) * (g - 1) * 0.10 * dt;
+        this.pitch += Math.sin(time * 1.55 + 0.4) * (g - 1) * 0.05 * dt;
+      }
+    }
     const rawV = dt > 0 ? (this.y - prevY) / dt : 0;
     this.vspeed += (rawV - this.vspeed) * Math.min(1, dt * 5);
     this.propPhase += dt * (4 + power * 46);
