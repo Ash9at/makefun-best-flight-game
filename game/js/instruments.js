@@ -24,9 +24,9 @@ function box(ctx, x, y, w, h, r = 8) {
   ctx.stroke();
 }
 
-function label(ctx, text, x, y, size = 11, color = CYAN, align = 'center') {
+function label(ctx, text, x, y, size = 11, color = CYAN, align = 'center', weight = 600) {
   ctx.fillStyle = color;
-  ctx.font = `600 ${size}px "Segoe UI", system-ui, sans-serif`;
+  ctx.font = `${weight} ${size}px "Segoe UI", system-ui, sans-serif`;
   ctx.textAlign = align;
   ctx.textBaseline = 'middle';
   ctx.fillText(text, x, y);
@@ -61,7 +61,12 @@ function headingTape(ctx, w, headingDeg) {
   ctx.beginPath();
   ctx.moveTo(w / 2 - 5, y + 42); ctx.lineTo(w / 2 + 5, y + 42); ctx.lineTo(w / 2, y + 50);
   ctx.closePath(); ctx.fill();
-  label(ctx, `${Math.round(headingDeg)}°`, w / 2, y + 62, 14, LIT);
+  // The current heading is a primary readout: big, bold, and boxed
+  // against the sky so it survives being shrunk to a thumbnail.
+  ctx.fillStyle = 'rgba(8,16,24,0.72)';
+  ctx.strokeStyle = EDGE;
+  ctx.beginPath(); ctx.roundRect(w / 2 - 28, y + 50, 56, 22, 5); ctx.fill(); ctx.stroke();
+  label(ctx, `${Math.round(headingDeg)}°`, w / 2, y + 61, 17, LIT, 'center', 800);
 }
 
 // A vertical tape (airspeed on the left, altitude on the right) with a
@@ -94,13 +99,14 @@ function verticalTape(ctx, x, y, h, value, step, fmt, title, warn, bands) {
     label(ctx, fmt(v), x + 34, yy, 11.5, CYAN);
   }
   ctx.restore();
-  // The readout box rides the middle of the tape.
+  // The readout box rides the middle of the tape. It is the number
+  // the pilot — and the thumbnail — reads first: big and bold.
   ctx.fillStyle = warn ? RED : '#101c28';
   ctx.strokeStyle = warn ? RED : LIT;
   ctx.beginPath();
-  ctx.roundRect(x + 8, mid - 14, 70, 28, 5);
+  ctx.roundRect(x + 5, mid - 17, 76, 34, 5);
   ctx.fill(); ctx.stroke();
-  label(ctx, fmt(value), x + 43, mid, 15, warn ? '#fff' : LIT);
+  label(ctx, fmt(value), x + 43, mid, 19, warn ? '#fff' : LIT, 'center', 800);
 }
 
 function artificialHorizon(ctx, x, y, r, plane) {
@@ -225,8 +231,17 @@ export function drawInstruments(ctx, w, h, plane, mission, time) {
 // always findable, and "ahead" is visible at a glance.
 export function drawObjective(ctx, w, h, obj) {
   if (!obj) return;
-  const cx = w / 2, cy = 96;
+  const cx = w / 2, cy = 100;
   const ahead = Math.abs(obj.rel) < 0.25;
+  const distTxt = obj.dist >= 1000 ? `${(obj.dist / 1000).toFixed(1)} KM` : `${Math.round(obj.dist)} M`;
+  const txt = `${obj.label} · ${distTxt}`;
+  // A dark pill behind arrow and text: over bright sky the bare
+  // letters washed out, and this is the readout that says where to go.
+  ctx.font = `800 16px "Segoe UI", system-ui, sans-serif`;
+  const tw = ctx.measureText(txt).width;
+  ctx.fillStyle = 'rgba(8,16,24,0.66)';
+  ctx.strokeStyle = EDGE;
+  ctx.beginPath(); ctx.roundRect(cx - 74, cy - 14, tw + 96, 28, 7); ctx.fill(); ctx.stroke();
   ctx.save();
   ctx.translate(cx - 58, cy);
   ctx.rotate(clamp(obj.rel, -1.2, 1.2));
@@ -235,8 +250,7 @@ export function drawObjective(ctx, w, h, obj) {
   ctx.moveTo(0, -8); ctx.lineTo(5.5, 6); ctx.lineTo(0, 2.5); ctx.lineTo(-5.5, 6);
   ctx.closePath(); ctx.fill();
   ctx.restore();
-  const distTxt = obj.dist >= 1000 ? `${(obj.dist / 1000).toFixed(1)} KM` : `${Math.round(obj.dist)} M`;
-  label(ctx, `${obj.label} · ${distTxt}`, cx + 8, cy, 13, ahead ? GREEN : CYAN, 'left');
+  label(ctx, txt, cx + 8, cy, 16, ahead ? GREEN : CYAN, 'left', 800);
 }
 
 // A centred event banner: gate cleared, mail away, touchdown judged.
