@@ -8,7 +8,7 @@
 
 import { Renderer } from './renderer.js';
 import { Particles } from './particles.js';
-import { Aircraft } from './aircraft.js';
+import { Aircraft, AIRFRAMES } from './aircraft.js';
 import { Traffic } from './traffic.js';
 import { PilotLog } from './pilotlog.js';
 import { autopilotInput } from './autopilot.js';
@@ -48,6 +48,7 @@ function recordResult() {
 
 let screen = 'title'; // title | brief | fly | done
 let selected = 0; // sortie index on the title screen
+let frameIndex = 0; // airframe index, chosen on the briefing screen
 let mission = null;
 let banner = null; // {text, sub, until}
 let time = 0;
@@ -78,6 +79,8 @@ attachKeys((code) => {
   } else if (screen === 'brief') {
     if (code === 'Enter') startSortie(selected);
     if (code === 'Escape') screen = 'title';
+    if (code === 'ArrowLeft') frameIndex = (frameIndex + AIRFRAMES.length - 1) % AIRFRAMES.length;
+    if (code === 'ArrowRight') frameIndex = (frameIndex + 1) % AIRFRAMES.length;
   } else if (screen === 'fly') {
     if (code === 'Space' && mission) mission.releaseBag(plane);
     if (code === 'KeyP') paused = !paused;
@@ -90,6 +93,7 @@ addEventListener('pointerdown', () => sound.ensure());
 
 function startSortie(index) {
   selected = index;
+  plane.applyFrame(AIRFRAMES[frameIndex]);
   mission = new Mission(SORTIES[index], plane, sound);
   // The campaign airframe: yesterday's bent wing is today's problem.
   if (airframeDamage > 0) plane.damage = airframeDamage;
@@ -125,7 +129,7 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('6 sorties · 12 gates · 5 mail drops · 2 fires · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
+  text('6 sorties · 2 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
   panel(W / 2 - 345, 232, 690, 340);
   SORTIES.forEach((s, i) => {
     const y = 268 + i * 44;
@@ -154,7 +158,9 @@ function drawBrief() {
   panel(W / 2 - 330, 140, 660, 380);
   text(s.name, W / 2, 188, 30, '#ffd98a', 'center', 800);
   text(s.tagline, W / 2, 224, 15.5, '#9fd8ef');
-  s.brief.forEach((line, i) => text(line, W / 2, 272 + i * 27, 16.5, '#dfeaf4'));
+  const f = AIRFRAMES[frameIndex];
+  text(`AIRFRAME — ${f.name}: ${f.line} · ← → change`, W / 2, 252, 13.5, '#ffb02e');
+  s.brief.forEach((line, i) => text(line, W / 2, 284 + i * 26, 16.5, '#dfeaf4'));
   if (airframeDamage > 0) {
     text(`Airframe ${airframeDamage}% damaged — more drag, softer controls, earlier stall`, W / 2, 442, 14, '#ffb02e');
     text('ENTER — take off', W / 2, 470, 17, '#7de08d');
@@ -290,7 +296,7 @@ window.SKYPOST = {
     traffic: { x: Math.round(traffic.plane.x), y: Math.round(traffic.plane.y), z: Math.round(traffic.plane.z) },
     log: pilotLog.entries,
   } : null),
-  state: () => ({ screen, x: plane.x, y: plane.y, z: plane.z, yaw: plane.yaw, speed: plane.speed, crashed: plane.crashed }),
+  state: () => ({ screen, x: plane.x, y: plane.y, z: plane.z, yaw: plane.yaw, speed: plane.speed, crashed: plane.crashed, frame: plane.frame.id, stalled: plane.stalled }),
   cam: () => ({
     pos: [renderer.cam.x, renderer.cam.y, renderer.cam.z],
     f: renderer.cam.f, r: renderer.cam.r, u: renderer.cam.u,

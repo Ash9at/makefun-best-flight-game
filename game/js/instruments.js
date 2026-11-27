@@ -164,10 +164,12 @@ export function drawInstruments(ctx, w, h, plane, mission, time) {
   const kt = plane.speed * 1.944;
   const altM = Math.max(0, plane.y);
   headingTape(ctx, w, plane.headingDeg());
-  // Stall at 27 m/s is 52 kt; the approach band runs to 68 kt.
+  // The bands move with the airframe: red below her stall, amber
+  // through the approach speeds above it.
+  const stallKt = (plane.frame ? plane.frame.stall : 27) * 1.944;
   const asiBands = [
-    { from: 0, to: 52, color: 'rgba(255,93,71,0.55)' },
-    { from: 52, to: 68, color: 'rgba(255,176,46,0.45)' },
+    { from: 0, to: stallKt, color: 'rgba(255,93,71,0.55)' },
+    { from: stallKt, to: stallKt + 16, color: 'rgba(255,176,46,0.45)' },
   ];
   verticalTape(ctx, 16, h / 2 - 130, 250, kt, 20, (v) => `${Math.round(v)}`, 'AIRSPEED KT', plane.stalled, asiBands);
   verticalTape(ctx, w - 102, h / 2 - 130, 250, altM, 50, (v) => `${Math.round(v)}`, 'ALTITUDE M', false);
@@ -260,7 +262,7 @@ export function drawBanner(ctx, w, h, text, sub, alpha) {
 export function drawPathMarker(ctx, w, h, plane, cam) {
   if (!cam || plane.speed < 6) return;
   const b = plane.basis();
-  const slide = plane.stalled ? (27 - plane.speed) * 0.42 : 0;
+  const slide = plane.stalled ? ((plane.stallSpeed || 27) - plane.speed) * 0.42 : 0;
   const vx = b.f.x * plane.speed + (plane.onGround ? 0 : plane.wind.x);
   const vy = b.f.y * plane.speed - slide;
   const vz = b.f.z * plane.speed + (plane.onGround ? 0 : plane.wind.z);

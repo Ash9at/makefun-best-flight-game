@@ -11,11 +11,29 @@ export const STALL_SPEED = 27; // m/s, below this the wing gives up
 export const TOUCHDOWN_MAX_SINK = -3.6; // m/s, gentler than this is a landing
 export const TOUCHDOWN_MAX_SPEED = 64; // m/s on the deck
 
+// The two airframes of the Skyward Post, chosen on the briefing
+// screen. The Postie is the aeroplane every brief is written for.
+// The Dart is the fast spare: more thrust, less drag, a crisper
+// roll — and a wing that gives up 4 m/s earlier, so she is quicker
+// everywhere and less forgiving everywhere, and thirstier with it.
+export const AIRFRAMES = [
+  { id: 'postie', name: 'Postie', line: 'the standard mail plane — stall 27, gentle manners', stall: 27, thrust: 13.5, drag: 0.0038, rollRate: 2.6, burn: 1 },
+  { id: 'dart', name: 'Dart', line: 'the fast spare — stall 31, crisper, thirstier', stall: 31, thrust: 16.8, drag: 0.0032, rollRate: 3.2, burn: 1.25 },
+];
+
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 export class Aircraft {
   constructor() {
+    // The chosen airframe persists across sorties (reset() places
+    // the plane; it does not change which plane it is).
+    this.frame = AIRFRAMES[0];
+    this.stallSpeed = STALL_SPEED;
     this.reset({ x: 0, y: 200, z: 1900, yaw: 0, speed: 55 });
+  }
+
+  applyFrame(frame) {
+    this.frame = frame;
   }
 
   // Place the plane in the air (or on a strip) with a clean airframe.
@@ -82,17 +100,18 @@ export class Aircraft {
     // Throttle and the fuel it drinks.
     this.throttle = clamp(this.throttle + input.throttleDelta * dt * 0.7, 0, 1);
     const burning = this.fuel > 0;
-    if (burning && !this.onGround) this.fuel = Math.max(0, this.fuel - dt * (0.14 + this.throttle * 0.30));
+    if (burning && !this.onGround) this.fuel = Math.max(0, this.fuel - dt * (0.14 + this.throttle * 0.30) * this.frame.burn);
     const power = burning ? this.throttle : 0;
     // Past 40 points of damage the airframe itself flies worse: drag
     // up, controls softer, the wing gives up earlier. A firm arrival
     // early in a sortie is a decision the rest of it is flown with.
     const wear = Math.max(0, this.damage - 40);
-    const stallSpeed = STALL_SPEED * (1 + 0.002 * wear);
+    const stallSpeed = this.frame.stall * (1 + 0.002 * wear);
+    this.stallSpeed = stallSpeed;
 
     // Roll toward the commanded bank; the bank does the turning.
     const targetRoll = input.roll * 1.05;
-    this.roll += clamp(targetRoll - this.roll, -2.6 * dt, 2.6 * dt);
+    this.roll += clamp(targetRoll - this.roll, -this.frame.rollRate * dt, this.frame.rollRate * dt);
     const turnRate = (9.81 * Math.tan(clamp(this.roll, -1.2, 1.2))) / Math.max(this.speed, 16);
     if (!this.onGround) this.yaw += turnRate * dt;
 
@@ -111,9 +130,9 @@ export class Aircraft {
     // sailplane with a job: power-off drag falls to a fifth, best glide
     // near 33 m/s at a gentle 3 m/s sink, so a dead-stick landing is a
     // plan, not a prayer.
-    const thrust = power * 13.5;
+    const thrust = power * this.frame.thrust;
     const turnDrag = this.onGround ? 0 : 0.0022 * Math.sin(this.roll) * Math.sin(this.roll);
-    const drag = (0.0038 * (burning ? 1 : 0.22) + turnDrag) * (1 + 0.003 * wear) * this.speed * this.speed + (this.onGround ? 2.2 : 0);
+    const drag = (this.frame.drag * (burning ? 1 : 0.22) + turnDrag) * (1 + 0.003 * wear) * this.speed * this.speed + (this.onGround ? 2.2 : 0);
     let accel = thrust - drag - 9.81 * Math.sin(this.pitch);
     if (this.onGround && power === 0) accel -= 3.0; // brakes and grass
     this.speed = Math.max(0, this.speed + accel * dt);
