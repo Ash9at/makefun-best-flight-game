@@ -688,8 +688,8 @@ export class Mission {
 
   updateCarrier(plane, events) {
     if (!events.touchedDown || this.judged) return;
-    this.judged = true;
     if (plane.overDeck()) {
+      this.judged = true;
       const pos = plane.deckPosition();
       const inBox = Math.abs(pos.along) <= 70 && Math.abs(pos.across) <= 20;
       const centre = Math.max(0, 400 - Math.round(Math.abs(pos.across) * 16));
@@ -701,6 +701,7 @@ export class Mission {
         `Centreline ${centre} · zone ${zonePts} · gentle ${gentle} · damage −${Math.round(plane.damage * 2)}`,
       ]);
     } else if (plane.overRunway() && !plane.crashed) {
+      this.judged = true;
       this.finish(220, 'Diverted to the strip', [
         'A safe landing ashore: 220 points.',
         'The deck wanted you, but the island caught you.',
