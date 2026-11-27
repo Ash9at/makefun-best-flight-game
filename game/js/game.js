@@ -14,7 +14,7 @@ import { PilotLog } from './pilotlog.js';
 import { autopilotInput } from './autopilot.js';
 import { Mission, SORTIES } from './missions.js';
 import { attachKeys, pilotInput } from './input.js';
-import { drawInstruments, drawBanner, drawPathMarker, drawObjective } from './instruments.js';
+import { drawInstruments, drawBanner, drawPathMarker, drawObjective, drawDropSight } from './instruments.js';
 import { Sound } from './audio.js';
 import { RUNWAY } from './world.js';
 
@@ -35,14 +35,15 @@ const pilotLog = new PilotLog();
 let lastWasBest = false;
 // The campaign airframe: damage a sortie ends with is the damage the
 // next one starts with — the plane remembers being bent. A crash
-// writes her off and a fresh airframe is free; a repair on the title
-// screen costs 150 campaign points. Push on bent, or pay: a decision
-// that outlives any single sortie.
+// writes her off, but the replacement is a tired war-surplus spare
+// that starts 25% worn, so the write-off is never the free way out
+// of a repair bill; a repair on the title screen costs 150 campaign
+// points. Push on bent, or pay: a decision that outlives any sortie.
 let airframeDamage = 0;
 let repairDebt = 0;
 function recordResult() {
   lastWasBest = pilotLog.record(mission);
-  airframeDamage = plane.crashed ? 0 : Math.round(plane.damage);
+  airframeDamage = plane.crashed ? 25 : Math.round(plane.damage);
 }
 
 let screen = 'title'; // title | brief | fly | done
@@ -237,6 +238,12 @@ function frame(now) {
     const sc = mission.scene();
     renderer.render(W, H, { plane, traffic: traffic.plane, time, particles, weather: mission.sortie.weather, ...sc });
     drawPathMarker(ctx, W, H, plane, renderer.cam);
+    // The drop sight, on sorties where SPACE lets something go:
+    // the predicted splash point of a release made this second.
+    if (screen === 'fly' && mission.state === 'flying') {
+      const sightY = mission.dropSight();
+      if (sightY !== null) drawDropSight(ctx, W, H, plane, renderer.cam, sightY);
+    }
     drawInstruments(ctx, W, H, plane, mission.hud(), time);
     if (screen === 'fly' && mission.state === 'flying') {
       const o = mission.objective();

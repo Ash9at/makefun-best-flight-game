@@ -282,3 +282,34 @@ export function drawPathMarker(ctx, w, h, plane, cam) {
   ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy - 15);
   ctx.stroke();
 }
+
+// The drop sight: where a bag let go THIS SECOND would land. The bag
+// keeps the plane's velocity and falls under gravity, so the sight
+// runs the same little ballistic sum the mission itself will run —
+// stepped forward until it reaches the ground the target sits on —
+// and draws a small amber diamond there. It turns "lead the target"
+// from a guess into an instrument: fly until the diamond sits in
+// the ring, then let go.
+export function drawDropSight(ctx, w, h, plane, cam, groundY) {
+  if (!cam || plane.onGround || plane.speed < 6) return;
+  const b = plane.basis();
+  let x = plane.x, y = plane.y - 2, z = plane.z;
+  const vx = b.f.x * plane.speed, vz = b.f.z * plane.speed;
+  let vy = b.f.y * plane.speed - 1;
+  const dt = 0.08;
+  for (let t = 0; t < 14 && y > groundY + 1; t += dt) {
+    vy -= 9.81 * dt;
+    x += vx * dt; y += vy * dt; z += vz * dt;
+  }
+  const p = cam.project(x, groundY + 1.5, z, w, h);
+  if (!p) return;
+  const s = clamp(p.s * 2.2, 4, 13);
+  ctx.strokeStyle = 'rgba(255,196,64,0.92)';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - s); ctx.lineTo(p.x + s, p.y); ctx.lineTo(p.x, p.y + s); ctx.lineTo(p.x - s, p.y);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,196,64,0.9)';
+  ctx.beginPath(); ctx.arc(p.x, p.y, 1.6, 0, Math.PI * 2); ctx.fill();
+}

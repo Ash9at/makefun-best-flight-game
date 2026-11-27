@@ -14,6 +14,10 @@ import { STALL_SPEED } from './aircraft.js';
 const FAIR = { rain: 0, fog: 0, dusk: false, wind: { x: 0, z: 0, gust: 1 } };
 const STORM = { rain: 0.85, fog: 0.55, dusk: true, wind: { x: -7, z: 3, gust: 2.6 } };
 const NIGHT = { rain: 0, fog: 0.12, dusk: false, night: true, wind: { x: -2, z: 1, gust: 1.15 } };
+// The carrier steams into her own weather: a working crosswind with
+// a gust in it, so her approach is a crab and a correction, never a
+// glide down a rail — the constraint no other sortie has.
+const CARRIER_WX = { rain: 0, fog: 0, dusk: false, wind: { x: 3, z: -2, gust: 1.35 } };
 
 export const SORTIES = [
   {
@@ -52,12 +56,14 @@ export const SORTIES = [
     tagline: 'One deck, a yellow box, no second tries',
     brief: [
       'The carrier rides north-west, deck lit and waiting.',
-      'Come in slow and flat along her centreline, touch down',
-      'inside the yellow box, sink rate gentler than 3.6 m/s.',
-      'Too fast or too firm and the deck crew will fish you out.',
+      'She steams into a crosswind that pushes you off her',
+      'centreline the whole way down — crab in, correct late.',
+      'Come in slow and flat, touch down inside the yellow',
+      'box, sink rate gentler than 3.6 m/s. Too fast or too',
+      'firm and the deck crew will fish you out.',
     ],
     spawn: { x: -2093, y: 138, z: -384, yaw: 0.6, speed: 52, throttle: 0.45 },
-    weather: FAIR,
+    weather: CARRIER_WX,
   },
   {
     id: 'rescue',
@@ -268,6 +274,20 @@ export class Mission {
       };
     }
     return { title: 'FREE FLIGHT', lines: ['The island is yours', 'Land on the strip or deck to finish'] };
+  }
+
+  // The ground a release now would fall to, for the drop sight: the
+  // active zone's height on a drop sortie, the sea on the rescue.
+  // Null whenever SPACE would do nothing.
+  dropSight() {
+    if (this.state !== 'flying' || this.bag) return null;
+    if (this.sortie.id === 'mail' || this.sortie.id === 'night' || this.sortie.id === 'fire') {
+      if (this.bagsLeft <= 0) return null;
+      const zone = this.zones[this.zoneIndex];
+      return zone ? zone.y : null;
+    }
+    if (this.sortie.id === 'rescue' && this.raftPhase === 'find') return 0;
+    return null;
   }
 
   // SPACE pressed: the mail plane drops a bag, the rescue plane a raft.
