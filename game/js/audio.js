@@ -65,9 +65,9 @@ export class Sound {
     if (!this.started) return;
     const t = this.ctx.currentTime;
     if (!plane) {
-      // Behind the menus there is no sortie: wind the engine and
-      // the wind down to silence rather than freezing them at
-      // whatever levels the last flight left behind.
+      // Behind the menus — or behind the PAUSED card — no sortie is
+      // flying: wind the engine and the wind down to silence rather
+      // than freezing them at whatever levels the flight left.
       this.engGain.gain.setTargetAtTime(0, t, 0.15);
       this.windGain.gain.setTargetAtTime(0, t, 0.15);
       return;

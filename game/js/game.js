@@ -285,7 +285,10 @@ function frame(now) {
 
   if (screen === 'title') drawTitle();
   if (screen === 'brief') drawBrief();
-  sound.update(screen === 'fly' || screen === 'done' ? plane : null);
+  // Paused, the sortie is not flying either: the sound winds down
+  // behind the PAUSED card just as it does behind the menus, and
+  // ramps back from the plane's own levels when flying resumes.
+  sound.update(!paused && (screen === 'fly' || screen === 'done') ? plane : null);
 }
 
 // Screenshot hooks: the maker stages real scenes of the running game.
