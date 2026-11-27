@@ -62,8 +62,16 @@ export class Sound {
 
   // Per-frame levels from the state of the plane.
   update(plane) {
-    if (!this.started || !plane) return;
+    if (!this.started) return;
     const t = this.ctx.currentTime;
+    if (!plane) {
+      // Behind the menus there is no sortie: wind the engine and
+      // the wind down to silence rather than freezing them at
+      // whatever levels the last flight left behind.
+      this.engGain.gain.setTargetAtTime(0, t, 0.15);
+      this.windGain.gain.setTargetAtTime(0, t, 0.15);
+      return;
+    }
     // An empty tank is a dead engine, whatever the lever says: the
     // prop winds down to windmilling and only the wind is left.
     const lever = plane.fuel > 0 ? plane.throttle : 0;
