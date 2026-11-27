@@ -7,12 +7,27 @@
 // projection and fills only. Particles live in particles.js.
 
 import { Camera } from './camera.js';
-import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight, LIGHTHOUSE, FIELDS, ROADS } from './world.js';
+import { GRID, TREES, BUILDINGS, CLOUDS, RUNWAY, CARRIER, GATES, GATE_RADIUS, DROP_ZONES, DROP_RADIUS, BOATS, boatPosition, FLOCKS, birdPosition, groundHeight, LIGHTHOUSE, HARBOUR, FIELDS, ROADS } from './world.js';
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 
 const SUN = { x: -0.45, y: 0.62, z: -0.66 }; // toward the afternoon sun
+
+// Where the clouds' shadows fall: every cloud projected down the
+// sun's rays to the ground, spread wider than the cloud itself.
+// The land is painted with these soft dark pools in drawTerrain,
+// so the sky's field is written on the ground too.
+const CLOUD_SHADOWS = CLOUDS.map((c) => ({
+  x: c.x - (SUN.x / SUN.y) * c.y,
+  z: c.z - (SUN.z / SUN.y) * c.y,
+  r: c.s * 1.5,
+}));
+
+function darken(rgb, f) {
+  const p = rgb.slice(4, -1).split(',');
+  return `rgb(${Math.round(p[0] * f)},${Math.round(p[1] * f)},${Math.round(p[2] * f)})`;
+}
 
 // Port Sable roof colours, indexed by each building's tone.
 const ROOFS = [[168, 84, 60], [96, 106, 118], [178, 120, 80], [150, 148, 140]];
@@ -196,7 +211,20 @@ export class Renderer {
         pts.push(p);
       }
       if (!ok) continue;
-      poly(ctx, pts, colors[j * n + i]);
+      let fill = colors[j * n + i];
+      if (!this.night && !this.storm) {
+        // Cloud shadow: how deep this cell sits in the cloud
+        // field's shade, pooled softly at the edges.
+        const ccx = x0 + cell / 2, ccz = z0 + cell / 2;
+        let sh = 0;
+        for (const s of CLOUD_SHADOWS) {
+          const ddx = ccx - s.x, ddz = ccz - s.z;
+          const d2 = ddx * ddx + ddz * ddz;
+          if (d2 < s.r * s.r) sh = Math.max(sh, 1 - Math.sqrt(d2) / s.r);
+        }
+        if (sh > 0.02) fill = darken(fill, 1 - 0.30 * sh * sh);
+      }
+      poly(ctx, pts, fill);
     }
   }
 
@@ -417,6 +445,38 @@ export class Renderer {
         ctx.closePath();
         ctx.fill();
       }
+    }
+    // The harbour under the lighthouse point: a pier reaching
+    // into the bay, two portal cranes over it, cargo waiting in
+    // stacks, and a fishing boat moored along the south side.
+    {
+      const Hb = HARBOUR;
+      const c = Math.cos(Hb.yaw), s = Math.sin(Hb.yaw);
+      const at = (lx, lz) => ({ x: Hb.x + lx * c - lz * s, z: Hb.z + lx * s + lz * c });
+      const tones = (col) => {
+        const t = this.night ? col.map((v) => Math.round(v * 0.42)) : col;
+        return { top: shade(t, null, 0.8), side: shade(t, null, 0.1), end: shade(t, null, -0.25) };
+      };
+      drawBox(ctx, cam, w, h, Hb.x, 1.4, Hb.z, 3.4, 1.6, 62, Hb.yaw, tones([122, 116, 106]));
+      const cargoTones = [[150, 90, 70], [80, 110, 130], [120, 130, 90], [160, 140, 90]];
+      [[1, -45], [1, -6], [1, 38], [-1, 12]].forEach(([lx, lz], i) => {
+        const p = at(lx, lz);
+        drawBox(ctx, cam, w, h, p.x, 4.3, p.z, 2.6, 1.3, 5, Hb.yaw, tones(cargoTones[i % 4]));
+      });
+      for (const lz of [-30, 25]) {
+        for (const lx of [-2.4, 2.4]) {
+          const leg = at(lx, lz);
+          drawBox(ctx, cam, w, h, leg.x, 11, leg.z, 0.5, 8, 0.5, Hb.yaw, tones([96, 100, 108]));
+        }
+        const beam = at(0, lz);
+        drawBox(ctx, cam, w, h, beam.x, 19.4, beam.z, 3.4, 0.7, 0.7, Hb.yaw, tones([190, 105, 50]));
+        const jib = at(-7.5, lz);
+        drawBox(ctx, cam, w, h, jib.x, 19.9, jib.z, 7, 0.45, 0.5, Hb.yaw, tones([190, 105, 50]));
+        const hook = at(-13, lz);
+        drawBox(ctx, cam, w, h, hook.x, 14, hook.z, 0.18, 5, 0.18, Hb.yaw, tones([40, 42, 48]));
+      }
+      const moored = at(-11, 20);
+      this.drawBoat(w, h, moored.x, moored.z, Hb.yaw, time);
     }
   }
 

@@ -208,6 +208,11 @@ for (const zone of DROP_ZONES) zone.y = groundHeight(zone.x, zone.z);
 export const LIGHTHOUSE = { x: 1262, z: 468, h: 34 };
 LIGHTHOUSE.y = groundHeight(LIGHTHOUSE.x, LIGHTHOUSE.z);
 
+// The harbour under the lighthouse point, where the coast road's
+// bay meets the sea: a pier reaching east-southeast into the
+// water, cranes and cargo on it, a boat moored along its side.
+export const HARBOUR = { x: 1595, z: 522, yaw: -1.23 };
+
 // The forest fires of the firefighting sortie: two seats in the pine
 // woods, west and south-east, each marked by its own smoke column. A
 // water bag dropped into the painted ring douses the seat.

@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/best-flight-game-20261126-0057/Ash9at/makefun-best-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
 [![reward](https://make.fun/badge/best-flight-game-20261126-0057/Ash9at/makefun-best-flight-game/reward.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
 
-An original chase-view flight game for the make.fun [best flight game](https://make.fun/bounty/best-flight-game-20261126-0057) bounty, written from scratch in hand-rolled vanilla JavaScript — no engine, no libraries, no assets. A tiny 3D projector drawn on a 2D canvas flies a mail plane over a procedural island with named, navigable landmarks: one volcanic cone, the town of Port Sable with its coast road, a strip, the south farm's field patchwork, a lighthouse on the east point, and an aircraft carrier riding at anchor offshore.
+An original chase-view flight game for the make.fun [best flight game](https://make.fun/bounty/best-flight-game-20261126-0057) bounty, written from scratch in hand-rolled vanilla JavaScript — no engine, no libraries, no assets. A tiny 3D projector drawn on a 2D canvas flies a mail plane over a procedural island with named, navigable landmarks: one volcanic cone, the town of Port Sable with its coast road, a strip, the south farm's field patchwork, a lighthouse on the east point, a crane harbour in the bay beneath it, and an aircraft carrier riding at anchor offshore.
 
 ## The sorties
 
@@ -61,7 +61,7 @@ node -e "require('http').createServer((q,r)=>{const fs=require('fs');const p=q.u
 Every file has one job, and the names say which:
 
 - `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, the fire seats, and the landmarks (lighthouse, farm fields, roads), plus the living traffic of boats and birds.
-- `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, landmarks, fires, and the weather (day, storm sky, fog, rain, the rescue flare, and the full night: stars, moon, lit windows, strip lights, the lighthouse beam).
+- `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, landmarks, fires, and the weather (day, storm sky, fog, rain, the rescue flare, and the full night: stars, moon, lit windows, strip lights, the lighthouse beam), plus cloud shadows that pool on the land under the cloud field.
 - `game/js/camera.js` — the chase camera, its projection, and touchdown shake.
 - `game/js/particles.js` — dust, spray and damage smoke.
 - `game/js/aircraft.js` — the flight model and the three airframes: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
