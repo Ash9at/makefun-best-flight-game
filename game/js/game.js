@@ -84,7 +84,15 @@ attachKeys((code) => {
   } else if (screen === 'fly') {
     if (code === 'Space' && mission) mission.releaseBag(plane);
     if (code === 'KeyP') paused = !paused;
-    if (code === 'Escape') { screen = 'title'; mission = null; demoHold = null; }
+    if (code === 'Escape') {
+      // Abandoning a sortie does not un-bend the aeroplane: the
+      // campaign airframe keeps whatever the sortie did to her
+      // (a pit stop's repair counts too — she was fixed, then
+      // parked). And the pause dies with the sortie.
+      airframeDamage = Math.round(plane.damage);
+      paused = false;
+      screen = 'title'; mission = null; demoHold = null;
+    }
   } else if (screen === 'done') {
     if (code === 'Enter' || code === 'Escape') { screen = 'title'; mission = null; }
   }
@@ -238,8 +246,11 @@ function frame(now) {
         screen = 'done';
       }
     }
-    traffic.step(dt, time);
-    particles.step(dt);
+    // Paused means paused: the world waits with the pilot.
+    if (!paused) {
+      traffic.step(dt, time);
+      particles.step(dt);
+    }
     renderer.cam.follow(plane, dt);
     const sc = mission.scene();
     renderer.render(W, H, { plane, traffic: traffic.plane, time, particles, weather: mission.sortie.weather, ...sc });

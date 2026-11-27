@@ -15,6 +15,11 @@ export class Traffic {
   constructor() {
     this.plane = new Aircraft();
     this.plane.reset({ x: 1900, y: CRUISE_Y, z: 300, yaw: -1.2, speed: 58, throttle: 0.62 });
+    // Her tank is scenery, not a system: she flies the island all
+    // day, so hers never runs dry. (The player's model would ditch
+    // her in the sea inside eight minutes — she is the living
+    // world, not a sortie.)
+    this.plane.fuel = 1e9;
     this.leg = 0;
   }
 

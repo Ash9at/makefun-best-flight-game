@@ -1,6 +1,6 @@
 // missions.js — the sorties of the Skyward Post.
 //
-// Seven jobs with different goals and a free-flight mode. Each sortie
+// Eight jobs with different goals and a free-flight mode. Each sortie
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 

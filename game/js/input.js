@@ -19,6 +19,11 @@ export function attachKeys(onPress) {
     onPress(e.code);
   });
   addEventListener('keyup', (e) => keys.delete(e.code));
+  // If the window loses focus mid-press (an alt-tab with the
+  // throttle held), the keyup never arrives and the key would
+  // stay held forever. Letting go of the window is letting go
+  // of the keys.
+  addEventListener('blur', () => keys.clear());
 }
 
 // One frame of stick, rudder and throttle from the held keys.
