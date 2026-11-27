@@ -192,6 +192,18 @@ export const GATES = [
 ];
 export const GATE_RADIUS = 58;
 
+// Five survey rings around the cone for the Volcano Survey, flown
+// south -> east -> north -> west while the ash thickens. Their
+// centres ride roughly 50-80 m over the slope: a contour lap of the
+// mountain, not a cruise past it.
+export const SURVEY_RINGS = [
+  { x: 79, y: 200, z: 615, yaw: 0.82 },
+  { x: 609, y: 110, z: 115, yaw: -0.44 },
+  { x: 297, y: 195, z: -544, yaw: -1.7 },
+  { x: -426, y: 185, z: -451, yaw: -2.96 },
+  { x: -560, y: 155, z: 265, yaw: 2.07 },
+];
+
 // Three mail drop zones: the town green, the south farm, the lighthouse point.
 export const DROP_ZONES = [
   { x: TOWN.cx - 40, z: TOWN.cz + 210, name: 'Port Sable green' },

@@ -66,7 +66,8 @@ attachKeys((code) => {
   sound.ensure();
   if (screen === 'title') {
     if (code.startsWith('Digit')) {
-      const n = Number(code.slice(5));
+      // Digit0 is the tenth row (the menu outgrew one hand).
+      const n = code === 'Digit0' ? 10 : Number(code.slice(5));
       if (n >= 1 && n <= SORTIES.length) { selected = n - 1; screen = 'brief'; }
     }
     if (code === 'Enter') screen = 'brief';
@@ -137,14 +138,14 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('8 sorties · 3 airframes · 12 gates · 7 drops · 1 carrier · 1 air race · 2 sea landings · day, storm and night', W / 2, 184, 12.5, '#9fd8ef');
+  text('9 sorties · 3 airframes · 12 gates · 5 survey rings · 7 drops · 1 carrier · 1 race · 2 sea landings', W / 2, 184, 12.5, '#9fd8ef');
   panel(W / 2 - 345, 232, 690, 384);
   SORTIES.forEach((s, i) => {
-    const y = 262 + i * 40;
+    const y = 258 + i * 36;
     if (i === selected) {
       ctx.fillStyle = 'rgba(255, 217, 138, 0.16)';
       ctx.beginPath();
-      ctx.roundRect(W / 2 - 321, y - 17, 642, 36, 8);
+      ctx.roundRect(W / 2 - 321, y - 15, 642, 32, 8);
       ctx.fill();
     }
     text(`${i + 1}  ${s.name}`, W / 2 - 303, y - 3, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);

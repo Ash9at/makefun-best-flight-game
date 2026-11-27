@@ -1,10 +1,10 @@
 // missions.js — the sorties of the Skyward Post.
 //
-// Eight jobs with different goals and a free-flight mode. Each sortie
+// Nine jobs with different goals and a free-flight mode. Each sortie
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, TENDERS, groundHeight, rescueBoatPosition } from './world.js';
+import { GATES, GATE_RADIUS, SURVEY_RINGS, DROP_ZONES, FIRES, CARRIER, RUNWAY, TENDERS, groundHeight, rescueBoatPosition } from './world.js';
 import { Aircraft, AIRFRAMES } from './aircraft.js';
 import { autopilotInput } from './autopilot.js';
 
@@ -19,6 +19,11 @@ const NIGHT = { rain: 0, fog: 0.12, dusk: false, night: true, wind: { x: -2, z: 
 // a gust in it, so her approach is a crab and a correction, never a
 // glide down a rail — the constraint no other sortie has.
 const CARRIER_WX = { rain: 0, fog: 0, dusk: false, wind: { x: 3, z: -2, gust: 1.35 } };
+// The volcano survey flies into the ash plume: a grey dusk, a
+// working drift, and a fog the mission itself thickens ring by
+// ring (scene() hands the renderer the current density). The base
+// fog here is only where the ramp starts.
+const ASH = { rain: 0.12, fog: 0.15, dusk: true, wind: { x: -3, z: 1, gust: 1.7 } };
 
 export const SORTIES = [
   {
@@ -143,6 +148,20 @@ export const SORTIES = [
     weather: FAIR,
   },
   {
+    id: 'survey',
+    name: 'Sortie 9 — Volcano Survey',
+    tagline: '5 rings around the cone, and the ash is thickening',
+    brief: [
+      'The cone is restless and the survey office wants a',
+      'contour lap: five rings around the mountain, flown',
+      'in order, each one a reading. The ash plume thickens',
+      'with every ring — by the last two you are flying the',
+      'panel in grey soup. Take the readings, then land home.',
+    ],
+    spawn: { x: 0, y: 210, z: 2150, yaw: 0, speed: 58, throttle: 0.6 },
+    weather: ASH,
+  },
+  {
     id: 'free',
     name: 'Free Flight — First Flight',
     tagline: 'A guided first lap, then the island is yours',
@@ -250,6 +269,16 @@ export class Mission {
         bag: null, zones: null, activeZone: -1,
       };
     }
+    if (this.sortie.id === 'survey') {
+      return {
+        gates: SURVEY_RINGS,
+        gateState: (i) => (i < this.nextGate ? 'done' : i === this.nextGate ? 'next' : 'todo'),
+        bag: null, zones: null, activeZone: -1,
+        // The ash thickens with every reading taken: the ramp is
+        // the sortie's clock, handed to the renderer per frame.
+        weather: { ...ASH, fog: 0.15 + this.nextGate * 0.11 },
+      };
+    }
     if (this.sortie.id === 'mail' || this.sortie.id === 'night') {
       return {
         gates: null, gateState: null,
@@ -301,6 +330,16 @@ export class Mission {
         lines: [
           `Ring ${Math.min(this.nextGate + 1, 12)} of 12 · clock ${this.clockRunning ? t + 's' : '—'}`,
           this.nextGate >= 12 ? 'All rings flown — land on the strip' : 'Follow the orange ring',
+        ],
+      };
+    }
+    if (this.sortie.id === 'survey') {
+      const ash = Math.round((0.15 + this.nextGate * 0.11) * 100);
+      return {
+        title: 'VOLCANO SURVEY',
+        lines: [
+          `Survey ring ${Math.min(this.nextGate + 1, 5)} of 5 · clock ${this.clockRunning ? t + 's' : '—'} · ash ${ash}%`,
+          this.nextGate >= 5 ? 'All readings taken — land on the strip' : 'Fly the orange ring — mind the slope in the murk',
         ],
       };
     }
@@ -409,6 +448,10 @@ export class Mission {
         const g = GATES[this.nextGate];
         return g ? { x: g.x, z: g.z, label: `RING ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
       }
+      case 'survey': {
+        const g = SURVEY_RINGS[this.nextGate];
+        return g ? { x: g.x, z: g.z, label: `SURVEY ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
+      }
       case 'mail':
       case 'night':
       case 'fire': {
@@ -466,6 +509,7 @@ export class Mission {
       return;
     }
     if (this.sortie.id === 'gates') this.updateGates(plane);
+    else if (this.sortie.id === 'survey') this.updateSurvey(plane);
     else if (this.sortie.id === 'race') this.updateRace(dt, plane);
     else if (this.sortie.id === 'mail' || this.sortie.id === 'night') this.updateMail(dt, plane);
     else if (this.sortie.id === 'fire') this.updateFire(dt, plane);
@@ -514,6 +558,38 @@ export class Mission {
         `Course time ${this.elapsed.toFixed(1)}s over 12 rings`,
         `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
         ...(place === 'deck' ? ['Home by way of the carrier deck, no less.'] : place === 'water' ? ['Home by water — the Otter taxis in like a boat.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
+      ]);
+    }
+  }
+
+  // The survey: a contour lap of the cone against the clock, five
+  // rings in order, while the ash thickens ring by ring (scene()
+  // ramps the fog). Noon-bright judgement does not apply here —
+  // the flying IS the instrument work: the slope is in the murk
+  // and the rings ride it close.
+  updateSurvey(plane) {
+    if (this.nextGate < SURVEY_RINGS.length) {
+      const g = SURVEY_RINGS[this.nextGate];
+      const d = Math.hypot(plane.x - g.x, plane.y - g.y, plane.z - g.z);
+      if (d < GATE_RADIUS - 4) {
+        if (!this.clockRunning) { this.clockRunning = true; this.elapsed = 0; }
+        this.gateTimes.push(this.elapsed);
+        this.nextGate++;
+        this.sound.gate();
+        this.popup(
+          this.nextGate >= SURVEY_RINGS.length ? 'ALL 5 READINGS TAKEN' : `SURVEY ${this.nextGate} OF 5`,
+          this.nextGate >= SURVEY_RINGS.length ? 'Now land on the strip for the full score' : 'the ash thickens — fly the panel',
+        );
+      }
+    } else if (this.stoppedAt(plane)) {
+      const place = this.stoppedAt(plane);
+      const rough = place === 'rough' ? 120 : 0;
+      const timeScore = Math.max(0, 1000 - Math.round(this.elapsed) * 3);
+      const score = timeScore + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2) - rough;
+      this.finish(Math.max(60, score), 'Survey complete — the cone is charted', [
+        `Course time ${this.elapsed.toFixed(1)}s over 5 survey rings`,
+        `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
+        'The last two rings were flown on the panel, in soup.',
       ]);
     }
   }
