@@ -4,7 +4,7 @@
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, groundHeight, rescueBoatPosition } from './world.js';
+import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, TENDERS, groundHeight, rescueBoatPosition } from './world.js';
 import { Aircraft, AIRFRAMES } from './aircraft.js';
 import { autopilotInput } from './autopilot.js';
 
@@ -128,6 +128,21 @@ export const SORTIES = [
     weather: FAIR,
   },
   {
+    id: 'supply',
+    name: 'Sortie 8 — Seaplane Supply',
+    tagline: 'Two tenders waiting on the water — take the Otter',
+    brief: [
+      'Two supply tenders ride at anchor: one in the harbour',
+      'bay, one across the island. Only the Otter can reach',
+      'them. Put down on the water beside each tender and',
+      'come to a stop — that is the delivery. Then take off',
+      'and fly the next leg, and bring her home to finish.',
+      'The other airframes meet the water as a crash.',
+    ],
+    spawn: { x: -190, y: 16, z: 780, yaw: Math.PI / 2, speed: 0, throttle: 0 },
+    weather: FAIR,
+  },
+  {
     id: 'free',
     name: 'Free Flight — First Flight',
     tagline: 'A guided first lap, then the island is yours',
@@ -187,6 +202,12 @@ export class Mission {
     this.raftPhase = 'find'; // find | away | home
     this.raftScore = 0;
     this.boatPos = rescueBoatPosition(0);
+    // Supply state: which tender is next, and whether she has
+    // been airborne since the last delivery (sitting stopped
+    // beside a tender must not finish the sortie by itself).
+    this.leg = 0;
+    this.supplyScore = 0;
+    this.supplyAirborne = false;
     // Race state: the rival flies the same rings in the silver Dart,
     // on the autopilot, against her own clock — each pilot's time
     // runs from their own first ring, so a dawdled start is fair.
@@ -401,6 +422,10 @@ export class Mission {
         }
         return { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
       }
+      case 'supply': {
+        const t = TENDERS[this.leg];
+        return t ? { x: t.x, z: t.z, label: 'TENDER' } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
+      }
       default:
         return null;
     }
@@ -444,6 +469,7 @@ export class Mission {
     else if (this.sortie.id === 'fire') this.updateFire(dt, plane);
     else if (this.sortie.id === 'carrier') this.updateCarrier(plane, events);
     else if (this.sortie.id === 'rescue') this.updateRescue(dt, plane, events);
+    else if (this.sortie.id === 'supply') this.updateSupply(plane);
     else if (this.sortie.id === 'free') this.updateFree(plane, events);
   }
 
@@ -720,6 +746,38 @@ export class Mission {
         'The carrier crew will be telling this one for weeks.',
       ]);
     }
+  }
+
+  // Seaplane supply: the delivery IS a water landing. Put down
+  // on the sea beside the anchored tender and come to a stop;
+  // her crew takes the crates while you sit on the floats. Then
+  // take off and fly the next leg. Only the Otter can play —
+  // the other airframes meet the water as a crash, which the
+  // briefing says out loud.
+  updateSupply(plane) {
+    const place = this.stoppedAt(plane);
+    if (this.leg < TENDERS.length) {
+      if (place !== 'water') return;
+      const t = TENDERS[this.leg];
+      if (Math.hypot(plane.x - t.x, plane.z - t.z) > 220) return;
+      this.leg += 1;
+      this.supplyScore += 350;
+      this.supplyAirborne = false;
+      this.popup(this.leg === 1 ? 'SUPPLIES ASHORE' : 'BOTH TENDERS SUPPLIED',
+        this.leg === 1 ? '+350 — one tender to go, across the island' : '+350 — now bring her home');
+      return;
+    }
+    if (!plane.onGround) this.supplyAirborne = true;
+    if (!place || !this.supplyAirborne) return;
+    const rough = place === 'rough' ? 120 : 0;
+    const score = Math.max(60, this.supplyScore
+      + Math.max(0, Math.round(400 - this.elapsed))
+      - Math.round(plane.damage * 2) - rough);
+    this.finish(score, 'Both tenders supplied', [
+      `Time ${Math.floor(this.elapsed / 60)}:${String(Math.floor(this.elapsed % 60)).padStart(2, '0')} for two water landings and the legs between.`,
+      ...(plane.damage > 0 ? [`She came home carrying ${Math.round(plane.damage)}% damage (−${Math.round(plane.damage * 2)}).`] : ['Not a scratch on the floats.']),
+      ...(place === 'water' ? ['Home by water — she taxis in like a boat.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
+    ]);
   }
 
   updateFree(plane, events) {

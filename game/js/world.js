@@ -260,6 +260,15 @@ export const BOATS = [
   { cx: 1750, cz: 500, r: 300, speed: 0.021, phase: 0.6, dir: 1 },
   { cx: -1850, cz: -450, r: 340, speed: 0.016, phase: 2.9, dir: -1 },
   { cx: 500, cz: 1950, r: 260, speed: 0.024, phase: 4.4, dir: 1 },
+  // The supply tenders ride at anchor (r 0, speed 0): one in the
+  // harbour bay, one across the island. Only a floatplane can
+  // reach them — the seaplane supply sortie is built on these.
+  { cx: 1750, cz: 700, r: 0, speed: 0, phase: 0.8, dir: 1 },
+  { cx: -1750, cz: 700, r: 0, speed: 0, phase: 2.4, dir: 1 },
+];
+export const TENDERS = [
+  { x: 1750, z: 700 },
+  { x: -1750, z: 700 },
 ];
 
 // Where a boat is at time t, and the heading it steams on (the yaw

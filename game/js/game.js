@@ -129,21 +129,21 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('7 sorties · 3 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · 1 air race · day, storm and night', W / 2, 184, 13, '#9fd8ef');
+  text('8 sorties · 3 airframes · 12 gates · 7 drops · 1 carrier · 1 air race · 2 sea landings · day, storm and night', W / 2, 184, 12.5, '#9fd8ef');
   panel(W / 2 - 345, 232, 690, 384);
   SORTIES.forEach((s, i) => {
-    const y = 268 + i * 44;
+    const y = 262 + i * 40;
     if (i === selected) {
       ctx.fillStyle = 'rgba(255, 217, 138, 0.16)';
       ctx.beginPath();
-      ctx.roundRect(W / 2 - 321, y - 19, 642, 40, 8);
+      ctx.roundRect(W / 2 - 321, y - 17, 642, 36, 8);
       ctx.fill();
     }
-    text(`${i + 1}  ${s.name}`, W / 2 - 303, y - 4, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
-    text(s.tagline, W / 2 + 303, y - 4, 12.5, '#8fb6cc', 'right');
+    text(`${i + 1}  ${s.name}`, W / 2 - 303, y - 3, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
+    text(s.tagline, W / 2 + 303, y - 3, 12.5, '#8fb6cc', 'right');
     const log = pilotLog.get(s.id);
     text(log ? `BEST ${log.best} · RANK ${log.rank} · flown ${log.plays}×` : '— not flown yet —',
-      W / 2 + 303, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
+      W / 2 + 303, y + 13, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
   const camp = pilotLog.campaign(SORTIES);
   text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 644, 14.5, '#cfe3f2');
@@ -289,6 +289,7 @@ window.SKYPOST = {
   release: () => { if (mission) mission.releaseBag(plane); },
   mission: () => (mission ? {
     id: mission.sortie.id, state: mission.state, nextGate: mission.nextGate,
+    leg: mission.leg ?? null,
     rivalGate: mission.rivalGate ?? null, rivalTime: mission.rivalTime ?? null,
     rival: mission.rival ? { x: Math.round(mission.rival.x), y: Math.round(mission.rival.y), z: Math.round(mission.rival.z), speed: Math.round(mission.rival.speed), crashed: mission.rival.crashed } : null,
     bagsLeft: mission.bagsLeft, drops: mission.dropScores.length,
