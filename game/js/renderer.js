@@ -580,6 +580,18 @@ export class Renderer {
     faces = faces.concat(box(0, 0.78, 1.6, 0.5, 0.34, 0.95, GLASS)); // canopy
     faces = faces.concat(box(-1.1, -1.05, 0.9, 0.14, 0.5, 0.14, DARK)); // gear legs
     faces = faces.concat(box(1.1, -1.05, 0.9, 0.14, 0.5, 0.14, DARK));
+    // The built details: parts a kit plane is assembled from, each a
+    // plate of its own — wing struts, wheel spats, a tailwheel, the
+    // exhaust stub, a radio mast, and the red cheatline she wears.
+    faces = faces.concat(box(-1.55, -0.5, 0.75, 0.07, 0.52, 0.07, DARK)); // struts
+    faces = faces.concat(box(1.55, -0.5, 0.75, 0.07, 0.52, 0.07, DARK));
+    faces = faces.concat(box(-1.1, -1.62, 0.9, 0.3, 0.34, 0.62, RED)); // wheel spats
+    faces = faces.concat(box(1.1, -1.62, 0.9, 0.3, 0.34, 0.62, RED));
+    faces = faces.concat(box(0, -0.72, -5.15, 0.16, 0.3, 0.3, DARK)); // tailwheel
+    faces = faces.concat(box(0.66, -0.28, 2.6, 0.12, 0.12, 0.5, DARK)); // exhaust stub
+    faces = faces.concat(box(0, 1.32, -0.6, 0.05, 0.42, 0.05, DARK)); // radio mast
+    faces = faces.concat(box(-0.64, 0.08, 0.2, 0.02, 0.13, 3.1, RED)); // cheatlines
+    faces = faces.concat(box(0.64, 0.08, 0.2, 0.02, 0.13, 3.1, RED));
     // Shade and sort the plates, then paint.
     const painted = [];
     for (const f of faces) {
@@ -701,6 +713,51 @@ export class Renderer {
     }
   }
 
+  // A forest fire seat: a ring of flame at the base and a column of
+  // smoke climbing out of the pines — the pilot finds the fire by its
+  // smoke, the way the brief says. Doused, it is a scorch mark and a
+  // thin wisp of steam.
+  drawFire(w, h, fire, time) {
+    const ctx = this.ctx;
+    const cam = this.cam;
+    if (fire.out) {
+      const q = cam.project(fire.x, fire.y + 6, fire.z, w, h);
+      if (q) {
+        ctx.fillStyle = 'rgba(220,225,228,0.30)';
+        ctx.beginPath();
+        ctx.arc(q.x, q.y, Math.max(2, 5 * q.s * 0.5), 0, Math.PI * 2);
+        ctx.fill();
+      }
+      return;
+    }
+    // Flame tongues at the seat, flickering on a hash of the time so
+    // they dance without a clock of their own.
+    for (let k = 0; k < 5; k++) {
+      const a = (k / 5) * Math.PI * 2 + fire.x;
+      const fx = fire.x + Math.cos(a) * 9, fz = fire.z + Math.sin(a) * 9;
+      const flick = 0.7 + 0.5 * Math.abs(Math.sin(time * 7 + k * 2.3 + fire.z));
+      const base = cam.project(fx, fire.y + 1, fz, w, h);
+      const tip = cam.project(fx, fire.y + 1 + 11 * flick, fz, w, h);
+      if (!base || !tip) continue;
+      ctx.strokeStyle = k % 2 ? 'rgba(255,140,40,0.9)' : 'rgba(255,190,60,0.9)';
+      ctx.lineWidth = Math.max(2, base.s * 1.1);
+      ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(tip.x, tip.y); ctx.stroke();
+    }
+    // The smoke column: dark puffs rising and drifting west, like the
+    // rescue boat's engine smoke but far taller — this one is a
+    // landmark, the thing the whole sortie navigates by.
+    for (let k = 0; k < 8; k++) {
+      const age = ((time * 0.3 + k / 8) % 1);
+      const px = fire.x - age * 46, py = fire.y + 8 + age * 95, pz = fire.z + age * 10;
+      const q = cam.project(px, py, pz, w, h);
+      if (!q) continue;
+      ctx.fillStyle = `rgba(40,38,36,${(0.5 * (1 - age)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(q.x, q.y, Math.max(2, (5 + age * 26) * q.s * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
   // The distress flare over the rescue boat: a pulsing ring on the water
   // where the raft must land, a masthead light, and every few seconds a
   // red flare arcing into the murk — the thing the pilot navigates by.
@@ -812,6 +869,7 @@ export class Renderer {
     this.drawScenery(w, h);
     this.drawBirds(w, h, scene.time);
     if (scene.zones) scene.zones.forEach((z, i) => this.drawDropZone(w, h, z, i === scene.activeZone));
+    if (scene.fires) scene.fires.forEach((f) => this.drawFire(w, h, f, scene.time));
     if (scene.gates) scene.gates.forEach((g, i) => this.drawGate(w, h, g, scene.gateState(i)));
     if (scene.rescue && scene.rescueSignals) this.drawRescueSignals(w, h, scene.rescue.x, scene.rescue.z, scene.time);
     if (scene.bag) this.drawBag(w, h, scene.bag);

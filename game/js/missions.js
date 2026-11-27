@@ -1,10 +1,10 @@
 // missions.js — the sorties of the Skyward Post.
 //
-// Four jobs with different goals and a free-flight mode. Each sortie
+// Six jobs with different goals and a free-flight mode. Each sortie
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, CARRIER, RUNWAY, rescueBoatPosition } from './world.js';
+import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, rescueBoatPosition } from './world.js';
 import { STALL_SPEED } from './aircraft.js';
 
 // The weather each sortie flies in: rain and fog for the renderer, a
@@ -89,6 +89,23 @@ export const SORTIES = [
     zones: [DROP_ZONES[0], DROP_ZONES[2]],
   },
   {
+    id: 'fire',
+    name: 'Sortie 6 — Forest Fire',
+    tagline: '2 fires in the pines, 3 water bags, no rain coming',
+    brief: [
+      'Two seats of fire in the pine woods, west and south-',
+      'east, each wearing its own column of smoke. You carry',
+      'three water bags for two fires — one spare, no more.',
+      'Drop into the painted ring: a bag from height is rain,',
+      'a bag from the treetops is a bucket. Low and slow',
+      'earns +60 here too. Miss twice and the woods keep one.',
+    ],
+    spawn: { x: -300, y: 190, z: 1900, yaw: 0.35, speed: 56, throttle: 0.58 },
+    weather: FAIR,
+    zones: FIRES,
+    bags: 3,
+  },
+  {
     id: 'free',
     name: 'Free Flight — First Flight',
     tagline: 'A guided first lap, then the island is yours',
@@ -134,7 +151,7 @@ export class Mission {
     // Mail state. A sortie may name its own zones (the night mail
     // flies a shorter round); the bag count follows the zones.
     this.zones = sortie.zones || DROP_ZONES;
-    this.bagsLeft = this.zones.length;
+    this.bagsLeft = sortie.bags || this.zones.length;
     this.bag = null; // {x,y,z,vx,vy,vz,releaseAlt,releaseSpeed}
     this.dropScores = [];
     this.zoneIndex = 0;
@@ -170,6 +187,16 @@ export class Mission {
         zones: this.zones, activeZone: this.zoneIndex,
       };
     }
+    if (this.sortie.id === 'fire') {
+      return {
+        gates: null, gateState: null,
+        bag: this.bag,
+        zones: this.zones, activeZone: this.zoneIndex,
+        // The renderer draws each seat's smoke; a seat is out once
+        // the drops have moved past it.
+        fires: this.zones.map((z, i) => ({ ...z, out: i < this.zoneIndex })),
+      };
+    }
     if (this.sortie.id === 'rescue') {
       return {
         gates: null, gateState: null,
@@ -200,6 +227,16 @@ export class Mission {
         lines: [
           `Bags aboard: ${this.bagsLeft} · delivered ${this.dropScores.length} of ${this.zones.length}`,
           zone ? `Next: ${zone.name} — SPACE to drop` : 'All bags away',
+        ],
+      };
+    }
+    if (this.sortie.id === 'fire') {
+      const zone = this.zones[this.zoneIndex];
+      return {
+        title: 'FOREST FIRE',
+        lines: [
+          `Water bags: ${this.bagsLeft} · fires out ${this.zoneIndex} of ${this.zones.length}`,
+          zone ? `Next: ${zone.name} — SPACE to drop` : 'All fires out',
         ],
       };
     }
@@ -236,7 +273,7 @@ export class Mission {
   // SPACE pressed: the mail plane drops a bag, the rescue plane a raft.
   releaseBag(plane) {
     if (this.state !== 'flying' || this.bag) return;
-    if (this.sortie.id === 'mail' || this.sortie.id === 'night') {
+    if (this.sortie.id === 'mail' || this.sortie.id === 'night' || this.sortie.id === 'fire') {
       if (this.bagsLeft <= 0) return;
       const b = plane.basis();
       const zone = this.zones[this.zoneIndex];
@@ -251,7 +288,7 @@ export class Mission {
       };
       this.bagsLeft--;
       this.sound.drop();
-      this.popup('MAIL AWAY', zone.name);
+      this.popup(this.sortie.id === 'fire' ? 'WATER AWAY' : 'MAIL AWAY', zone.name);
     } else if (this.sortie.id === 'rescue' && this.raftPhase === 'find') {
       const b = plane.basis();
       this.bag = {
@@ -274,9 +311,10 @@ export class Mission {
         return g ? { x: g.x, z: g.z, label: `RING ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
       }
       case 'mail':
-      case 'night': {
+      case 'night':
+      case 'fire': {
         const zn = this.zones[this.zoneIndex];
-        return zn ? { x: zn.x, z: zn.z, label: 'DROP ZONE' } : null;
+        return zn ? { x: zn.x, z: zn.z, label: this.sortie.id === 'fire' ? 'FIRE' : 'DROP ZONE' } : null;
       }
       case 'carrier':
         return { x: CARRIER.cx, z: CARRIER.cz, label: 'DECK' };
@@ -314,6 +352,7 @@ export class Mission {
     }
     if (this.sortie.id === 'gates') this.updateGates(plane);
     else if (this.sortie.id === 'mail' || this.sortie.id === 'night') this.updateMail(dt, plane);
+    else if (this.sortie.id === 'fire') this.updateFire(dt, plane);
     else if (this.sortie.id === 'carrier') this.updateCarrier(plane, events);
     else if (this.sortie.id === 'rescue') this.updateRescue(dt, plane, events);
     else if (this.sortie.id === 'free') this.updateFree(plane, events);
@@ -393,6 +432,56 @@ export class Mission {
         `Drops: ${this.dropScores.join(' + ')} = ${dropTotal} points`,
         `Fuel bonus ${Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}`,
         'Land anywhere safe — the flying is done.',
+      ]);
+    }
+  }
+
+  // The firefighting drop: like the mail, a bag falls ballistically —
+  // but a miss does not move on. The fire keeps burning, the spare
+  // bag is spent circling back, and with the bags gone the sortie
+  // ends on whatever was doused. Accuracy is the whole job here.
+  updateFire(dt, plane) {
+    if (this.bag) {
+      const bag = this.bag;
+      bag.vy -= 9.81 * dt;
+      bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
+      const zone = this.zones[this.zoneIndex];
+      if (bag.y <= zone.y + 1) {
+        const dist = Math.hypot(bag.x - zone.x, bag.z - zone.z);
+        if (dist < 46) {
+          let pts, word;
+          if (dist < 15) { pts = 300; word = 'RIGHT IN THE FLAMES'; }
+          else if (dist < 30) { pts = 210; word = 'DOWN THE SMOKE COLUMN'; }
+          else { pts = 120; word = 'EDGE OF THE RING — IT SUFFOCATES'; }
+          if (bag.releaseAlt < 75 && bag.releaseSpeed < 46) {
+            pts += 60;
+            word += ' · LOW AND SLOW +60';
+          }
+          this.dropScores.push(pts);
+          this.sound.scored();
+          this.popup(word, `${zone.name} is out · +${pts}`);
+          this.zoneIndex++;
+        } else {
+          this.sound.gate();
+          this.popup('MISSED — THE FIRE STILL BURNS', `${Math.round(dist)} m off · ${this.bagsLeft} bag${this.bagsLeft === 1 ? '' : 's'} left`);
+        }
+        this.bag = null;
+      }
+    }
+    if (this.zoneIndex >= this.zones.length && !this.bag) {
+      const dropTotal = this.dropScores.reduce((a, b) => a + b, 0);
+      const score = dropTotal + Math.round(plane.fuel) - Math.round(plane.damage * 2);
+      this.finish(Math.max(40, score), 'Both fires are out', [
+        `Drops: ${this.dropScores.join(' + ')} = ${dropTotal} points`,
+        `Fuel bonus ${Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}`,
+        'The woods will smoke for a day. The island keeps its pines.',
+      ]);
+    } else if (this.bagsLeft <= 0 && !this.bag && this.state === 'flying') {
+      const dropTotal = this.dropScores.reduce((a, b) => a + b, 0);
+      const score = dropTotal + Math.round(plane.fuel) - Math.round(plane.damage * 2);
+      this.finish(Math.max(30, score), 'Out of water', [
+        `${this.zoneIndex} of ${this.zones.length} fires doused for ${dropTotal} points`,
+        'The rest is up to the wind and the bucket brigades.',
       ]);
     }
   }

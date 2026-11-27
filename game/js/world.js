@@ -208,6 +208,15 @@ for (const zone of DROP_ZONES) zone.y = groundHeight(zone.x, zone.z);
 export const LIGHTHOUSE = { x: 1262, z: 468, h: 34 };
 LIGHTHOUSE.y = groundHeight(LIGHTHOUSE.x, LIGHTHOUSE.z);
 
+// The forest fires of the firefighting sortie: two seats in the pine
+// woods, west and south-east, each marked by its own smoke column. A
+// water bag dropped into the painted ring douses the seat.
+export const FIRES = [
+  { x: -1050, z: 900, name: 'the west pine fire' },
+  { x: 700, z: 1450, name: 'the south ridge fire' },
+];
+for (const fire of FIRES) fire.y = groundHeight(fire.x, fire.z);
+
 // The south farm's fields: a patchwork of small plots below the farm
 // drop zone, each a quad that follows the slope's corner heights, in
 // the greens and golds of worked land.

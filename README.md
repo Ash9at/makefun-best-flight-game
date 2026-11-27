@@ -1,4 +1,4 @@
-# Skyward Post — 5 sorties, 12 gates, 5 mail drops, 1 storm rescue, 1 carrier — day, storm and night
+# Skyward Post — 6 sorties, 12 gates, 5 mail drops, 2 fires, 1 storm rescue, 1 carrier — day, storm and night
 
 [![best-flight-game-20261126-0057 on make.fun](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
 [![rank](https://make.fun/badge/best-flight-game-20261126-0057/Ash9at/makefun-best-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
@@ -13,7 +13,8 @@ An original chase-view flight game for the make.fun [best flight game](https://m
 3. **Carrier Landing** — one 300 m deck, a yellow touchdown box, judged on centreline deviation, touchdown zone and sink rate.
 4. **Storm Rescue** — a fishing boat dead in a dusk storm south-east of the island. Weather is a system here, not a skin: rain, fog, a steady westerly drift and gusts that shove the nose and rock the wings. Find her by her red flare, drop the supply raft alongside (scored by the metre), then get home and land — on the strip, or, bravely, on the deck.
 5. **Night Mail** — the island after dark: 2 bags for 2 lantern-lit circles, navigating by the lit strip, the town's windows and the lighthouse's sweeping beam, flying the panel all the way.
-6. **Free Flight — First Flight** — a guided first lap (throttle, lift-off, a banked circle, a landing, one prompted step at a time), then the island is yours for as long as you like.
+6. **Forest Fire** — two seats of fire in the pine woods, found by their own smoke columns, and 3 water bags to douse them with: one spare, no more. A bag dropped into the painted ring scores by the metre and low-and-slow earns its +60 here too — but a miss does not move on: the fire keeps burning, the spare is spent circling back, and when the bags are gone the sortie ends on whatever was saved.
+7. **Free Flight — First Flight** — a guided first lap (throttle, lift-off, a banked circle, a landing, one prompted step at a time), then the island is yours for as long as you like.
 
 The island is alive while you fly it: fishing boats steam their routes offshore, birds work the thermals off the cone, and a second mail plane flies its own circuit all day. A pilot log on the title screen keeps your best score and rank per sortie and the campaign total for the session — and the campaign has a memory of its own: **damage carries from sortie to sortie**. End a flight bent and the next one starts bent, flying worse until you pay 150 campaign points for a repair on the title screen (a crash writes the airframe off, and its replacement is free). Push on damaged, or pay — the decision outlives any single sortie.
 
@@ -49,18 +50,19 @@ node -e "require('http').createServer((q,r)=>{const fs=require('fs');const p=q.u
 
 Every file has one job, and the names say which:
 
-- `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, and the landmarks (lighthouse, farm fields, roads), plus the living traffic of boats and birds.
-- `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, landmarks, and the weather (day, storm sky, fog, rain, the rescue flare, and the full night: stars, moon, lit windows, strip lights, the lighthouse beam).
+- `game/js/world.js` — the island: height field, runway and town flattening, carrier, gates, drop zones, the fire seats, and the landmarks (lighthouse, farm fields, roads), plus the living traffic of boats and birds.
+- `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, landmarks, fires, and the weather (day, storm sky, fog, rain, the rescue flare, and the full night: stars, moon, lit windows, strip lights, the lighthouse beam).
 - `game/js/camera.js` — the chase camera, its projection, and touchdown shake.
 - `game/js/particles.js` — dust, spray and damage smoke.
 - `game/js/aircraft.js` — the flight model: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
-- `game/js/missions.js` — the five sorties and free flight: objectives, weather, scoring, debriefs.
+- `game/js/missions.js` — the six sorties and free flight: objectives, weather, scoring, debriefs.
 - `game/js/traffic.js` — the other mail plane on its all-day circuit.
 - `game/js/autopilot.js` — the demo hold that flies the menus.
 - `game/js/pilotlog.js` — the session log book behind the campaign board.
 - `game/js/instruments.js` — the HUD: tapes, horizon, the flight-path vector, gauges, banners.
 - `game/js/audio.js` — the synthesised engine, wind, stall warning and chimes.
-- `game/js/game.js` — boot, keyboard, screens (title, briefing, flying, debrief) and the frame loop.
+- `game/js/input.js` — the keyboard: the held-key set and what the held keys mean for the plane.
+- `game/js/game.js` — boot, screens (title, briefing, flying, debrief) and the frame loop.
 - `main.ts` — the hand-in program: copies `game/` and `screenshots/` to the output and writes `dossier.json` with the vendored make.fun library (`vendor/makefun-game.ts`, unchanged from the kit).
 
 ## License

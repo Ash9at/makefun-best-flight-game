@@ -1,9 +1,10 @@
-// game.js — Skyward Post: boot, input, screens and the frame loop.
+// game.js — Skyward Post: boot, screens and the frame loop.
 //
 // The flow is title -> briefing -> flying -> debrief, with the island
-// always live behind the menus. This file owns the keyboard, the camera
-// direction and the banner queue; the flying itself lives in
-// aircraft.js, the jobs in missions.js, the panel in instruments.js.
+// always live behind the menus. This file owns the screens, the
+// camera direction and the banner queue; the keyboard lives in
+// input.js, the flying itself in aircraft.js, the jobs in
+// missions.js, the panel in instruments.js.
 
 import { Renderer } from './renderer.js';
 import { Particles } from './particles.js';
@@ -12,6 +13,7 @@ import { Traffic } from './traffic.js';
 import { PilotLog } from './pilotlog.js';
 import { autopilotInput } from './autopilot.js';
 import { Mission, SORTIES } from './missions.js';
+import { attachKeys, pilotInput } from './input.js';
 import { drawInstruments, drawBanner, drawPathMarker, drawObjective } from './instruments.js';
 import { Sound } from './audio.js';
 import { RUNWAY } from './world.js';
@@ -57,51 +59,33 @@ let menuArmed = false; // the menu's autopilot flight is set up once
 // use it too.
 let demoHold = null; // {heading, alt}
 
-// --- Keyboard ------------------------------------------------------------
-const keys = new Set();
-addEventListener('keydown', (e) => {
+// --- Keyboard: presses drive the screens; input.js holds the keys --
+attachKeys((code) => {
   sound.ensure();
-  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-  if (e.repeat) return;
-  keys.add(e.code);
   if (screen === 'title') {
-    if (e.code.startsWith('Digit')) {
-      const n = Number(e.code.slice(5));
+    if (code.startsWith('Digit')) {
+      const n = Number(code.slice(5));
       if (n >= 1 && n <= SORTIES.length) { selected = n - 1; screen = 'brief'; }
     }
-    if (e.code === 'Enter') screen = 'brief';
-    if (e.code === 'ArrowUp') selected = (selected + SORTIES.length - 1) % SORTIES.length;
-    if (e.code === 'ArrowDown') selected = (selected + 1) % SORTIES.length;
-    if (e.code === 'KeyR' && airframeDamage > 0) {
+    if (code === 'Enter') screen = 'brief';
+    if (code === 'ArrowUp') selected = (selected + SORTIES.length - 1) % SORTIES.length;
+    if (code === 'ArrowDown') selected = (selected + 1) % SORTIES.length;
+    if (code === 'KeyR' && airframeDamage > 0) {
       repairDebt += 150;
       airframeDamage = 0;
     }
   } else if (screen === 'brief') {
-    if (e.code === 'Enter') startSortie(selected);
-    if (e.code === 'Escape') screen = 'title';
+    if (code === 'Enter') startSortie(selected);
+    if (code === 'Escape') screen = 'title';
   } else if (screen === 'fly') {
-    if (e.code === 'Space' && mission) mission.releaseBag(plane);
-    if (e.code === 'KeyP') paused = !paused;
-    if (e.code === 'Escape') { screen = 'title'; mission = null; demoHold = null; }
+    if (code === 'Space' && mission) mission.releaseBag(plane);
+    if (code === 'KeyP') paused = !paused;
+    if (code === 'Escape') { screen = 'title'; mission = null; demoHold = null; }
   } else if (screen === 'done') {
-    if (e.code === 'Enter' || e.code === 'Escape') { screen = 'title'; mission = null; }
+    if (code === 'Enter' || code === 'Escape') { screen = 'title'; mission = null; }
   }
 });
-addEventListener('keyup', (e) => keys.delete(e.code));
 addEventListener('pointerdown', () => sound.ensure());
-
-function pilotInput() {
-  const input = { pitch: 0, roll: 0, throttleDelta: 0, rudder: 0 };
-  if (keys.has('ArrowUp')) input.pitch += 1;
-  if (keys.has('ArrowDown')) input.pitch -= 1;
-  if (keys.has('ArrowLeft')) input.roll -= 1;
-  if (keys.has('ArrowRight')) input.roll += 1;
-  if (keys.has('KeyA')) input.rudder = -1;
-  if (keys.has('KeyD')) input.rudder = 1;
-  if (keys.has('KeyW')) input.throttleDelta += 1;
-  if (keys.has('KeyS')) input.throttleDelta -= 1;
-  return input;
-}
 
 function startSortie(index) {
   selected = index;
@@ -140,7 +124,7 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 330, 84, 660, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('5 sorties · 12 gates · 5 mail drops · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 16, '#9fd8ef');
+  text('6 sorties · 12 gates · 5 mail drops · 2 fires · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 16, '#9fd8ef');
   panel(W / 2 - 330, 232, 660, 292);
   SORTIES.forEach((s, i) => {
     const y = 270 + i * 44;
