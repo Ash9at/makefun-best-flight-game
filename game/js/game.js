@@ -123,44 +123,44 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 }
 
 function drawTitle() {
-  panel(W / 2 - 330, 84, 660, 128);
+  panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('6 sorties · 12 gates · 5 mail drops · 2 fires · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 16, '#9fd8ef');
-  panel(W / 2 - 330, 232, 660, 292);
+  text('6 sorties · 12 gates · 5 mail drops · 2 fires · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
+  panel(W / 2 - 345, 232, 690, 340);
   SORTIES.forEach((s, i) => {
-    const y = 270 + i * 44;
+    const y = 268 + i * 44;
     if (i === selected) {
       ctx.fillStyle = 'rgba(255, 217, 138, 0.16)';
       ctx.beginPath();
-      ctx.roundRect(W / 2 - 306, y - 19, 612, 40, 8);
+      ctx.roundRect(W / 2 - 321, y - 19, 642, 40, 8);
       ctx.fill();
     }
-    text(`${i + 1}  ${s.name}`, W / 2 - 288, y - 4, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
-    text(s.tagline, W / 2 + 288, y - 4, 12.5, '#8fb6cc', 'right');
+    text(`${i + 1}  ${s.name}`, W / 2 - 303, y - 4, 18.5, i === selected ? '#ffd98a' : '#dfeaf4', 'left', 700);
+    text(s.tagline, W / 2 + 303, y - 4, 12.5, '#8fb6cc', 'right');
     const log = pilotLog.get(s.id);
     text(log ? `BEST ${log.best} · RANK ${log.rank} · flown ${log.plays}×` : '— not flown yet —',
-      W / 2 + 288, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
+      W / 2 + 303, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
   const camp = pilotLog.campaign(SORTIES);
-  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 552, 14.5, '#cfe3f2');
+  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 596, 14.5, '#cfe3f2');
   if (airframeDamage > 0) {
-    text(`AIRFRAME ${airframeDamage}% DAMAGED — she flies worse until repaired · R repair (−150 pts)`, W / 2, 578, 13.5, '#ffb02e');
+    text(`AIRFRAME ${airframeDamage}% DAMAGED — she flies worse until repaired · R repair (−150 pts)`, W / 2, 622, 13.5, '#ffb02e');
   }
-  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 604, 13, '#8fb6cc');
+  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 648, 13, '#8fb6cc');
 }
 
 function drawBrief() {
   const s = SORTIES[selected];
-  panel(W / 2 - 330, 150, 660, 330);
-  text(s.name, W / 2, 196, 30, '#ffd98a', 'center', 800);
-  text(s.tagline, W / 2, 232, 15.5, '#9fd8ef');
-  s.brief.forEach((line, i) => text(line, W / 2, 282 + i * 27, 16.5, '#dfeaf4'));
+  panel(W / 2 - 330, 140, 660, 380);
+  text(s.name, W / 2, 188, 30, '#ffd98a', 'center', 800);
+  text(s.tagline, W / 2, 224, 15.5, '#9fd8ef');
+  s.brief.forEach((line, i) => text(line, W / 2, 272 + i * 27, 16.5, '#dfeaf4'));
   if (airframeDamage > 0) {
-    text(`Airframe ${airframeDamage}% damaged — more drag, softer controls, earlier stall`, W / 2, 440, 14, '#ffb02e');
-    text('ENTER — take off', W / 2, 462, 17, '#7de08d');
+    text(`Airframe ${airframeDamage}% damaged — more drag, softer controls, earlier stall`, W / 2, 442, 14, '#ffb02e');
+    text('ENTER — take off', W / 2, 470, 17, '#7de08d');
   } else {
-    text('ENTER — take off', W / 2, 428, 17, '#7de08d');
-    text('ESC — back', W / 2, 452, 13.5, '#8fb6cc');
+    text('ENTER — take off', W / 2, 448, 17, '#7de08d');
+    text('ESC — back', W / 2, 474, 13.5, '#8fb6cc');
   }
 }
 
