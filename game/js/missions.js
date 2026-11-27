@@ -284,7 +284,9 @@ export class Mission {
     if (this.sortie.id === 'race') {
       const hers = this.rivalTime !== null
         ? `she is home in ${this.rivalTime.toFixed(1)}s`
-        : `she is on ring ${Math.min(this.rivalGate + 1, 12)} of 12`;
+        : this.rival.crashed
+          ? `she went down on ring ${Math.min(this.rivalGate + 1, 12)}`
+          : `she is on ring ${Math.min(this.rivalGate + 1, 12)} of 12`;
       return {
         title: 'AIR RACE',
         lines: [
@@ -567,7 +569,9 @@ export class Mission {
           this.playerSplit12 = this.elapsed;
           this.popup('ALL 12 RINGS FLOWN', this.rivalTime !== null
             ? `her ${this.rivalTime.toFixed(1)}s · yours ${this.elapsed.toFixed(1)}s — now land it`
-            : 'she is still flying — land on the strip');
+            : this.rival.crashed
+              ? 'she is down — land on the strip and the round is yours'
+              : 'she is still flying — land on the strip');
         } else {
           const hers = this.rivalSplits[this.nextGate - 1];
           this.popup(`RING ${this.nextGate} OF 12`, hers !== undefined
@@ -587,7 +591,9 @@ export class Mission {
       } else {
         margin = 260 + (GATES.length - this.rivalGate) * 20;
         title = 'You beat her home — by a distance';
-        verdict = `She was still on ring ${Math.min(this.rivalGate + 1, 12)} when you landed`;
+        verdict = this.rival.crashed
+          ? `She went down on ring ${Math.min(this.rivalGate + 1, 12)} — the sky kept her score`
+          : `She was still on ring ${Math.min(this.rivalGate + 1, 12)} when you landed`;
       }
       const score = timeScore + margin + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2) - rough;
       this.finish(Math.max(60, score), title, [
@@ -604,7 +610,10 @@ export class Mission {
       bag.vy -= 9.81 * dt;
       bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
       const zone = this.zones[this.zoneIndex];
-      if (bag.y <= zone.y + 1) {
+      // The bag comes down on the ground actually under it: a
+      // hillside in the way stops it, not the zone's own height.
+      const floorY = Math.max(zone.y, groundHeight(bag.x, bag.z));
+      if (bag.y <= floorY + 1) {
         const dist = Math.hypot(bag.x - zone.x, bag.z - zone.z);
         let pts, word;
         if (dist < 15) { pts = 300; word = 'ON THE MAT'; }
@@ -646,7 +655,10 @@ export class Mission {
       bag.vy -= 9.81 * dt;
       bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
       const zone = this.zones[this.zoneIndex];
-      if (bag.y <= zone.y + 1) {
+      // As with the mail: the water bag lands on the terrain
+      // under it, not at the fire's height through a hillside.
+      const floorY = Math.max(zone.y, groundHeight(bag.x, bag.z));
+      if (bag.y <= floorY + 1) {
         const dist = Math.hypot(bag.x - zone.x, bag.z - zone.z);
         if (dist < 46) {
           let pts, word;
@@ -716,7 +728,10 @@ export class Mission {
       const bag = this.bag;
       bag.vy -= 9.81 * dt;
       bag.x += bag.vx * dt; bag.y += bag.vy * dt; bag.z += bag.vz * dt;
-      if (bag.y <= 1.2) {
+      // The sea decides the score — but a raft let go over the
+      // island comes down on the island, not through it.
+      const floorY = Math.max(groundHeight(bag.x, bag.z), 0);
+      if (bag.y <= floorY + 1.2) {
         const dist = Math.hypot(bag.x - this.boatPos.x, bag.z - this.boatPos.z);
         let word;
         if (dist < 14) { this.raftScore = 420; word = 'RIGHT ALONGSIDE'; }
