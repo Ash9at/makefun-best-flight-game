@@ -420,6 +420,7 @@ export class Mission {
     if (!plane.onGround || plane.speed >= 4) return null;
     if (plane.overRunway()) return 'strip';
     if (plane.overDeck()) return 'deck';
+    if (plane.frame.floats && groundHeight(plane.x, plane.z) < 0.5) return 'water';
     return 'rough';
   }
 
@@ -484,7 +485,7 @@ export class Mission {
       this.finish(Math.max(60, score), 'Circuit complete — and home again', [
         `Course time ${this.elapsed.toFixed(1)}s over 12 rings`,
         `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
-        ...(place === 'deck' ? ['Home by way of the carrier deck, no less.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
+        ...(place === 'deck' ? ['Home by way of the carrier deck, no less.'] : place === 'water' ? ['Home by water — the Otter taxis in like a boat.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
       ]);
     }
   }
@@ -566,7 +567,7 @@ export class Mission {
       this.finish(Math.max(60, score), title, [
         verdict,
         `Time points ${timeScore} · margin ${margin >= 0 ? '+' : ''}${margin} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
-        ...(place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
+        ...(place === 'water' ? ['Home by water — the Otter taxis in like a boat.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
       ]);
     }
   }

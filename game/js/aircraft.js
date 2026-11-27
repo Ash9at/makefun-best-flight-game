@@ -19,12 +19,14 @@ export const TOUCHDOWN_MAX_SPEED = 64; // m/s on the deck
 // The Otter is the heavy lifter: slow, draggy and lazy in the roll,
 // but her wing holds on down to 22 m/s and she sips fuel — the
 // drop specialist, creeping over a circle at speeds that would
-// drop the others out of the sky. Each wears her own paint, so the
+// drop the others out of the sky. She is also the floatplane:
+// where the others meet the sea as a crash, she can put down on
+// it, taxi, and take off again. Each wears her own paint, so the
 // pilot (and the rival across the sky) can be told at a glance.
 export const AIRFRAMES = [
   { id: 'postie', name: 'Postie', line: 'the standard mail plane — stall 27, gentle manners', stall: 27, thrust: 13.5, drag: 0.0038, rollRate: 2.6, burn: 1, paint: [[232, 222, 198], [178, 52, 42]] },
   { id: 'dart', name: 'Dart', line: 'the fast spare — stall 31, crisper, thirstier', stall: 31, thrust: 16.8, drag: 0.0032, rollRate: 3.2, burn: 1.25, paint: [[203, 213, 224], [44, 84, 150]] },
-  { id: 'otter', name: 'Otter', line: 'the heavy lifter — stall 22, slow, sips fuel', stall: 22, thrust: 11.2, drag: 0.0052, rollRate: 2.0, burn: 0.8, paint: [[116, 146, 92], [232, 222, 198]] },
+  { id: 'otter', name: 'Otter', line: 'the floatplane lifter — stall 22, slow, puts down on the sea', stall: 22, thrust: 11.2, drag: 0.0052, rollRate: 2.0, burn: 0.8, floats: true, paint: [[116, 146, 92], [232, 222, 198]] },
 ];
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
@@ -188,11 +190,17 @@ export class Aircraft {
 
     if (this.y <= floorY) {
       this.y = floorY;
-      const onStrip = deck !== null || this.overRunway();
+      // A floatplane meets the sea as a surface: the usual
+      // judgement decides whether the arrival was a landing, a
+      // firm arrival or a wreck. For every other airframe the
+      // sea is simply a crash.
+      const onWater = deck === null && ground < 0.5;
+      const floatsDown = onWater && !!this.frame.floats;
+      const onStrip = deck !== null || this.overRunway() || floatsDown;
       if (!wasGround) {
         // The arrival itself: judge it once, on the way in.
         events.touchedDown = true;
-        if (deck === null && ground < 0.5) {
+        if (onWater && !floatsDown) {
           this.crashed = 'water';
           events.splashed = true;
         } else if (this.vspeed < -9 || this.speed > 96) {

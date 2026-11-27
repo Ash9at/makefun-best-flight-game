@@ -129,7 +129,7 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('7 sorties · 3 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · 1 air race · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
+  text('7 sorties · 3 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · 1 air race · day, storm and night', W / 2, 184, 13, '#9fd8ef');
   panel(W / 2 - 345, 232, 690, 384);
   SORTIES.forEach((s, i) => {
     const y = 268 + i * 44;
