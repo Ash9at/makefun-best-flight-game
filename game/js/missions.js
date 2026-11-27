@@ -447,10 +447,12 @@ export class Mission {
   }
 
   updateGates(plane) {
-    // The pit stop: a full stop on the strip before the last ring is
-    // a trade — the crew refuels and patches the airframe, and the
-    // clock takes 25 s for it. Worth it after a bent arrival or a
-    // thirsty first half; a detour that costs the lead if it is not.
+    // The pit stop: one full stop on the strip before the last
+    // ring is a trade — the crew refuels and patches the airframe,
+    // and the clock takes 25 s for it. Worth it after a bent
+    // arrival or a thirsty first half; a detour that costs the
+    // lead if it is not. Once per circuit: the crew is not a
+    // resetting resource to farm.
     if (this.nextGate < GATES.length && plane.onGround && plane.overRunway() && plane.speed < 4) {
       if (!this.pitDone) {
         this.pitDone = true;
@@ -460,8 +462,6 @@ export class Mission {
         this.sound.gate();
         this.popup('PIT STOP', 'refuelled and patched — 25 s on the clock');
       }
-    } else if (!plane.onGround) {
-      this.pitDone = false;
     }
     if (this.nextGate < GATES.length) {
       const g = GATES[this.nextGate];
