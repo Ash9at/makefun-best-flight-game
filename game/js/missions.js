@@ -1,11 +1,12 @@
 // missions.js — the sorties of the Skyward Post.
 //
-// Six jobs with different goals and a free-flight mode. Each sortie
+// Seven jobs with different goals and a free-flight mode. Each sortie
 // owns its state, its scoring and the words on its debrief screen; the
 // game loop only flies the plane and asks the mission what happened.
 
-import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, rescueBoatPosition } from './world.js';
-import { STALL_SPEED } from './aircraft.js';
+import { GATES, GATE_RADIUS, DROP_ZONES, FIRES, CARRIER, RUNWAY, groundHeight, rescueBoatPosition } from './world.js';
+import { Aircraft, AIRFRAMES } from './aircraft.js';
+import { autopilotInput } from './autopilot.js';
 
 // The weather each sortie flies in: rain and fog for the renderer, a
 // steady wind and a gust multiplier for the flight model. Only the
@@ -112,6 +113,21 @@ export const SORTIES = [
     bags: 3,
   },
   {
+    id: 'race',
+    name: 'Sortie 7 — Air Race',
+    tagline: 'The other mail plane, the same 12 rings — beat her home',
+    brief: [
+      'The other mail pilot reckons her silver Dart is quicker',
+      'than anything you can fly. Same twelve rings as the',
+      'circuit, but she starts beside you and races every one.',
+      'Splits at each ring say who is ahead. Beat her ring-12',
+      'time and land: the margin is points, either way. There',
+      'is no pit stop — she will not wait while you refuel.',
+    ],
+    spawn: { x: 0, y: 175, z: 2150, yaw: 0, speed: 58, throttle: 0.6 },
+    weather: FAIR,
+  },
+  {
     id: 'free',
     name: 'Free Flight — First Flight',
     tagline: 'A guided first lap, then the island is yours',
@@ -171,6 +187,23 @@ export class Mission {
     this.raftPhase = 'find'; // find | away | home
     this.raftScore = 0;
     this.boatPos = rescueBoatPosition(0);
+    // Race state: the rival flies the same rings in the silver Dart,
+    // on the autopilot, against her own clock — each pilot's time
+    // runs from their own first ring, so a dawdled start is fair.
+    if (sortie.id === 'race') {
+      this.rival = new Aircraft();
+      this.rival.applyFrame(AIRFRAMES[1]);
+      this.rival.reset({ x: 90, y: 185, z: 2330, yaw: 0, speed: 58, throttle: 0.6 });
+      // Her tank is not part of the contest: the race is against
+      // her flying, not her fuel gauge, so hers never runs dry.
+      this.rival.fuel = 1e9;
+      this.rivalGate = 0;
+      this.rivalClock = 0;
+      this.rivalStart = null;
+      this.rivalSplits = [];
+      this.rivalTime = null;
+      this.playerSplit12 = null;
+    }
   }
 
   popup(text, sub) {
@@ -179,6 +212,16 @@ export class Mission {
 
   // What the renderer needs beyond the world itself.
   scene() {
+    if (this.sortie.id === 'race') {
+      return {
+        gates: GATES,
+        gateState: (i) => (i < this.nextGate ? 'done' : i === this.nextGate ? 'next' : 'todo'),
+        bag: null, zones: null, activeZone: -1,
+        // She takes the sky the ambient traffic would have had:
+        // in the race, the second plane in frame is the opponent.
+        traffic: this.rival,
+      };
+    }
     if (this.sortie.id === 'gates') {
       return {
         gates: GATES,
@@ -217,6 +260,18 @@ export class Mission {
 
   hud() {
     const t = this.elapsed.toFixed(1);
+    if (this.sortie.id === 'race') {
+      const hers = this.rivalTime !== null
+        ? `she is home in ${this.rivalTime.toFixed(1)}s`
+        : `she is on ring ${Math.min(this.rivalGate + 1, 12)} of 12`;
+      return {
+        title: 'AIR RACE',
+        lines: [
+          `You: ring ${Math.min(this.nextGate + 1, 12)} of 12 · Rival: ${hers}`,
+          this.nextGate >= 12 ? 'All rings flown — land on the strip' : 'Follow the orange ring — she is flying it too',
+        ],
+      };
+    }
     if (this.sortie.id === 'gates') {
       return {
         title: 'GATE CIRCUIT',
@@ -326,7 +381,8 @@ export class Mission {
   objective() {
     if (this.state !== 'flying') return null;
     switch (this.sortie.id) {
-      case 'gates': {
+      case 'gates':
+      case 'race': {
         const g = GATES[this.nextGate];
         return g ? { x: g.x, z: g.z, label: `RING ${this.nextGate + 1}` } : { x: RUNWAY.cx, z: RUNWAY.cz, label: 'LAND' };
       }
@@ -356,6 +412,17 @@ export class Mission {
     this.sound.fanfare();
   }
 
+  // Where a finished course may end: the strip, the deck, or — at
+  // a price — the rough beside them. A parked aeroplane must
+  // always end the sortie: a pilot who lands long and rolls off
+  // the end with a dry tank has finished, not a soft-lock.
+  stoppedAt(plane) {
+    if (!plane.onGround || plane.speed >= 4) return null;
+    if (plane.overRunway()) return 'strip';
+    if (plane.overDeck()) return 'deck';
+    return 'rough';
+  }
+
   fail(reason) {
     if (this.state !== 'flying') return;
     this.state = 'failed';
@@ -371,6 +438,7 @@ export class Mission {
       return;
     }
     if (this.sortie.id === 'gates') this.updateGates(plane);
+    else if (this.sortie.id === 'race') this.updateRace(dt, plane);
     else if (this.sortie.id === 'mail' || this.sortie.id === 'night') this.updateMail(dt, plane);
     else if (this.sortie.id === 'fire') this.updateFire(dt, plane);
     else if (this.sortie.id === 'carrier') this.updateCarrier(plane, events);
@@ -408,12 +476,97 @@ export class Mission {
           this.nextGate >= 12 ? 'Now land on the strip for the full score' : `split ${this.elapsed.toFixed(1)}s`,
         );
       }
-    } else if (plane.onGround && plane.overRunway() && plane.speed < 4) {
+    } else if (this.stoppedAt(plane)) {
+      const place = this.stoppedAt(plane);
+      const rough = place === 'rough' ? 120 : 0;
       const timeScore = Math.max(0, 1150 - Math.round(this.elapsed) * 3);
-      const score = timeScore + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2);
+      const score = timeScore + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2) - rough;
       this.finish(Math.max(60, score), 'Circuit complete — and home again', [
         `Course time ${this.elapsed.toFixed(1)}s over 12 rings`,
-        `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}`,
+        `Time points ${timeScore} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
+        ...(place === 'deck' ? ['Home by way of the carrier deck, no less.'] : place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
+      ]);
+    }
+  }
+
+  // The race: the circuit's course and clock, but the other mail
+  // pilot is flying it too — in the silver Dart, on the autopilot,
+  // against her own clock. Her splits are read out at every ring;
+  // the margin between the two ring-12 times is points, either way.
+  updateRace(dt, plane) {
+    const r = this.rival;
+    this.rivalClock += dt;
+    if (this.rivalTime === null && !r.crashed) {
+      const g = GATES[this.rivalGate];
+      // She presses when she falls behind and eases when she runs
+      // away with it — the race stays a race to the last ring.
+      const target = Math.max(52, Math.min(62, 57 + (this.nextGate - this.rivalGate) * 1.5));
+      r.throttle = Math.max(0.15, Math.min(0.9, r.throttle + (target - r.speed) * 0.25 * dt));
+      // She flies like a pilot, not a rail: mid-leg her aim height
+      // clears the ground ahead of her — at racing speed the west
+      // hills sit a metre under the ring-9 line, and she has no
+      // wheels for a hillside. Close to a ring she settles onto
+      // the ring's own height and threads it.
+      const dNow = Math.hypot(g.x - r.x, g.z - r.z);
+      let alt = g.y;
+      if (dNow > 250) {
+        for (const ahead of [150, 300]) {
+          const gx = r.x + Math.sin(r.yaw) * ahead, gz = r.z - Math.cos(r.yaw) * ahead;
+          alt = Math.max(alt, groundHeight(gx, gz) + 25);
+        }
+      }
+      const hold = { heading: Math.atan2(g.x - r.x, -(g.z - r.z)), alt };
+      r.step(dt, autopilotInput(r, hold), this.rivalClock);
+      const d = Math.hypot(r.x - g.x, r.y - g.y, r.z - g.z);
+      if (d < GATE_RADIUS - 4) {
+        if (this.rivalStart === null) this.rivalStart = this.rivalClock;
+        this.rivalSplits.push(this.rivalClock - this.rivalStart);
+        this.rivalGate++;
+        if (this.rivalGate >= GATES.length) {
+          this.rivalTime = this.rivalSplits[this.rivalSplits.length - 1];
+          this.popup('THE RIVAL IS HOME', `her time ${this.rivalTime.toFixed(1)}s — beat it on your own clock`);
+        }
+      }
+    }
+    if (this.nextGate < GATES.length) {
+      const g = GATES[this.nextGate];
+      const d = Math.hypot(plane.x - g.x, plane.y - g.y, plane.z - g.z);
+      if (d < GATE_RADIUS - 4) {
+        if (!this.clockRunning) { this.clockRunning = true; this.elapsed = 0; }
+        this.gateTimes.push(this.elapsed);
+        this.nextGate++;
+        this.sound.gate();
+        if (this.nextGate >= 12) {
+          this.playerSplit12 = this.elapsed;
+          this.popup('ALL 12 RINGS FLOWN', this.rivalTime !== null
+            ? `her ${this.rivalTime.toFixed(1)}s · yours ${this.elapsed.toFixed(1)}s — now land it`
+            : 'she is still flying — land on the strip');
+        } else {
+          const hers = this.rivalSplits[this.nextGate - 1];
+          this.popup(`RING ${this.nextGate} OF 12`, hers !== undefined
+            ? `${hers >= this.elapsed ? '+' : ''}${(hers - this.elapsed).toFixed(1)}s ${hers >= this.elapsed ? 'AHEAD OF HER' : 'BEHIND HER'}`
+            : `split ${this.elapsed.toFixed(1)}s — she has not reached this ring`);
+        }
+      }
+    } else if (this.stoppedAt(plane)) {
+      const place = this.stoppedAt(plane);
+      const rough = place === 'rough' ? 120 : 0;
+      const timeScore = Math.max(0, 1150 - Math.round(this.elapsed) * 3);
+      let margin, title, verdict;
+      if (this.rivalTime !== null && this.playerSplit12 !== null) {
+        margin = Math.max(-300, Math.min(500, 200 + Math.round((this.rivalTime - this.playerSplit12) * 5)));
+        title = this.rivalTime >= this.playerSplit12 ? 'You beat her home' : 'Beaten — the round is hers';
+        verdict = `Her ${this.rivalTime.toFixed(1)}s against your ${this.playerSplit12.toFixed(1)}s on the rings`;
+      } else {
+        margin = 260 + (GATES.length - this.rivalGate) * 20;
+        title = 'You beat her home — by a distance';
+        verdict = `She was still on ring ${Math.min(this.rivalGate + 1, 12)} when you landed`;
+      }
+      const score = timeScore + margin + Math.round(plane.fuel * 1.5) - Math.round(plane.damage * 2) - rough;
+      this.finish(Math.max(60, score), title, [
+        verdict,
+        `Time points ${timeScore} · margin ${margin >= 0 ? '+' : ''}${margin} · fuel bonus ${Math.round(plane.fuel * 1.5)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
+        ...(place === 'rough' ? ['You rolled off the end and parked in the rough.'] : []),
       ]);
     }
   }
@@ -548,13 +701,14 @@ export class Mission {
         this.raftPhase = 'home';
       }
     }
-    if (this.raftPhase === 'home' && plane.onGround && plane.overRunway() && plane.speed < 4) {
-      const home = 260 + Math.round(plane.fuel) - Math.round(plane.damage * 2);
+    if (this.raftPhase === 'home' && this.stoppedAt(plane)) {
+      const rough = this.stoppedAt(plane) === 'rough' ? 120 : 0;
+      const home = 260 + Math.round(plane.fuel) - Math.round(plane.damage * 2) - rough;
       const score = this.raftScore + home;
       this.finish(Math.max(60, score), 'Home through the storm', [
         `Raft ${this.raftScore} points · the boat's crew has their supplies`,
-        `Home bonus ${260 + Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}`,
-        'Somewhere south-east, a flare goes up in thanks.',
+        `Home bonus ${260 + Math.round(plane.fuel)} · damage −${Math.round(plane.damage * 2)}${rough ? ' · off the strip −120' : ''}`,
+        ...(rough ? ['You rolled off the end and parked in the rough.'] : ['Somewhere south-east, a flare goes up in thanks.']),
       ]);
     }
     if (events.touchedDown && plane.overDeck() && this.raftPhase === 'home') {

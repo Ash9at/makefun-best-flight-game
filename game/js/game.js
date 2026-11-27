@@ -129,8 +129,8 @@ function text(str, x, y, size, color = '#dfeaf4', align = 'center', weight = 600
 function drawTitle() {
   panel(W / 2 - 345, 84, 690, 128);
   text('SKYWARD POST', W / 2, 134, 52, '#ffd98a', 'center', 800);
-  text('6 sorties · 2 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
-  panel(W / 2 - 345, 232, 690, 340);
+  text('7 sorties · 3 airframes · 12 gates · 7 drops · 1 storm rescue · 1 carrier · 1 air race · day, storm and night', W / 2, 184, 14.5, '#9fd8ef');
+  panel(W / 2 - 345, 232, 690, 384);
   SORTIES.forEach((s, i) => {
     const y = 268 + i * 44;
     if (i === selected) {
@@ -146,11 +146,11 @@ function drawTitle() {
       W / 2 + 303, y + 14, 11.5, log ? '#7de08d' : '#5f7d90', 'right');
   });
   const camp = pilotLog.campaign(SORTIES);
-  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 596, 14.5, '#cfe3f2');
+  text(`CAMPAIGN — ${camp.flown} of ${SORTIES.length} sorties flown · best total ${camp.total - repairDebt} · ↑ ↓ choose · ENTER briefing`, W / 2, 644, 14.5, '#cfe3f2');
   if (airframeDamage > 0) {
-    text(`AIRFRAME ${airframeDamage}% DAMAGED — she flies worse until repaired · R repair (−150 pts)`, W / 2, 622, 13.5, '#ffb02e');
+    text(`AIRFRAME ${airframeDamage}% DAMAGED — she flies worse until repaired · R repair (−150 pts)`, W / 2, 670, 13.5, '#ffb02e');
   }
-  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 648, 13, '#8fb6cc');
+  text('ARROWS bank & pitch · W/S throttle · A/D rudder · SPACE drop · P pause', W / 2, 696, 13, '#8fb6cc');
 }
 
 function drawBrief() {
@@ -289,6 +289,8 @@ window.SKYPOST = {
   release: () => { if (mission) mission.releaseBag(plane); },
   mission: () => (mission ? {
     id: mission.sortie.id, state: mission.state, nextGate: mission.nextGate,
+    rivalGate: mission.rivalGate ?? null, rivalTime: mission.rivalTime ?? null,
+    rival: mission.rival ? { x: Math.round(mission.rival.x), y: Math.round(mission.rival.y), z: Math.round(mission.rival.z), speed: Math.round(mission.rival.speed), crashed: mission.rival.crashed } : null,
     bagsLeft: mission.bagsLeft, drops: mission.dropScores.length,
     raftPhase: mission.raftPhase, raftScore: mission.raftScore,
     score: mission.result ? mission.result.score : null,

@@ -556,7 +556,10 @@ export class Renderer {
       plane.y + b.r.y * lx + b.u.y * ly + b.f.y * lz,
       plane.z + b.r.z * lx + b.u.z * ly + b.f.z * lz, w, h);
     // Faces: [local corners], base colour. Local: z forward, x right, y up.
-    const FUSE = [232, 222, 198], RED = [178, 52, 42], DARK = [38, 44, 52], GLASS = [70, 120, 160];
+    // The paint is the airframe's own: cream-and-red Postie, silver-
+    // and-blue Dart, green-and-cream Otter — told apart at a glance.
+    const [FUSE, WING] = plane.frame.paint || [[232, 222, 198], [178, 52, 42]];
+    const RED = WING, DARK = [38, 44, 52], GLASS = [70, 120, 160];
     const box = (cx, cy, cz, hx, hy, hz, col) => {
       const cs = [
         [-hx, -hy, -hz], [hx, -hy, -hz], [hx, -hy, hz], [-hx, -hy, hz],

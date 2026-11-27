@@ -1,4 +1,4 @@
-# Skyward Post — 6 sorties, 2 airframes, 12 gates, 5 mail drops, 2 fires, 1 storm rescue, 1 carrier — day, storm and night
+# Skyward Post — 7 sorties, 3 airframes, 12 gates, 5 mail drops, 2 fires, 1 storm rescue, 1 carrier, 1 air race — day, storm and night
 
 [![best-flight-game-20261126-0057 on make.fun](https://make.fun/badge/best-flight-game-20261126-0057.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
 [![rank](https://make.fun/badge/best-flight-game-20261126-0057/Ash9at/makefun-best-flight-game/rank.svg)](https://make.fun/bounty/best-flight-game-20261126-0057)
@@ -14,14 +14,16 @@ An original chase-view flight game for the make.fun [best flight game](https://m
 4. **Storm Rescue** — a fishing boat dead in a dusk storm south-east of the island. Weather is a system here, not a skin: rain, fog, a steady westerly drift and gusts that shove the nose and rock the wings. Find her by her red flare, drop the supply raft alongside (scored by the metre), then get home and land — on the strip, or, bravely, on the deck.
 5. **Night Mail** — the island after dark: 2 bags for 2 lantern-lit circles, navigating by the lit strip, the town's windows and the lighthouse's sweeping beam, flying the panel all the way.
 6. **Forest Fire** — two seats of fire in the pine woods, found by their own smoke columns, and 3 water bags to douse them with: one spare, no more. A bag dropped into the painted ring scores by the metre and low-and-slow earns its +60 here too — but a miss does not move on: the fire keeps burning, the spare is spent circling back, and when the bags are gone the sortie ends on whatever was saved.
-7. **Free Flight — First Flight** — a guided first lap (throttle, lift-off, a banked circle, a landing, one prompted step at a time), then the island is yours for as long as you like.
+7. **Air Race** — the same 12 rings as the circuit, but the other mail pilot is flying them too, in her silver Dart, from a start beside yours. Her splits are called at every ring against yours, each clock running from its own first ring; beat her ring-12 time and land, and the margin between the two times is points — either way. She presses when she falls behind and eases when she runs away with it, there is no pit stop, and for once the second plane in the sky is not scenery: she is the opponent.
+8. **Free Flight — First Flight** — a guided first lap (throttle, lift-off, a banked circle, a landing, one prompted step at a time), then the island is yours for as long as you like.
 
 ## The airframes
 
-Two aeroplanes, chosen on the briefing screen with ← →, and the panel's stall band moves to match the one you picked:
+Three aeroplanes, chosen on the briefing screen with ← →, each in her own paint, and the panel's stall band moves to match the one you picked:
 
-- **Postie** — the standard mail plane every brief is written for: stall at 27 m/s, gentle manners, an honest thirst.
-- **Dart** — the fast spare: more thrust, less drag, a crisper roll, and a wing that gives up at 31 m/s. Quicker on every leg and less forgiving on every arrival — the circuit's clock likes her, the carrier deck does not, and she drinks a quarter more fuel proving it.
+- **Postie** — the standard mail plane every brief is written for, cream and red: stall at 27 m/s, gentle manners, an honest thirst.
+- **Dart** — the fast spare, silver and blue: more thrust, less drag, a crisper roll, and a wing that gives up at 31 m/s. Quicker on every leg and less forgiving on every arrival — the circuit's clock likes her, the carrier deck does not, and she drinks a quarter more fuel proving it.
+- **Otter** — the heavy lifter, green and cream: the slowest of the three, draggy and lazy in the roll, but her wing holds on down to 22 m/s and she sips fuel. The drop specialist — she can creep over a painted circle at speeds that would drop the others out of the sky, which makes her the low-and-slow bonus's best friend and the circuit clock's worst.
 
 The island is alive while you fly it: fishing boats steam their routes offshore, birds work the thermals off the cone, and a second mail plane flies its own circuit all day. A pilot log on the title screen keeps your best score and rank per sortie and the campaign total for the session — and the campaign has a memory of its own: **damage carries from sortie to sortie**. End a flight bent and the next one starts bent, flying worse until you pay 150 campaign points for a repair on the title screen (a crash writes the airframe off — and the replacement is a tired war-surplus spare that starts 25% worn, so the write-off is never the free way out of the bill). Push on damaged, or pay — the decision outlives any single sortie.
 
@@ -62,8 +64,8 @@ Every file has one job, and the names say which:
 - `game/js/renderer.js` — the hand-rolled 3D projector: terrain, carrier, rings, boats, landmarks, fires, and the weather (day, storm sky, fog, rain, the rescue flare, and the full night: stars, moon, lit windows, strip lights, the lighthouse beam).
 - `game/js/camera.js` — the chase camera, its projection, and touchdown shake.
 - `game/js/particles.js` — dust, spray and damage smoke.
-- `game/js/aircraft.js` — the flight model and the two airframes: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
-- `game/js/missions.js` — the six sorties and free flight: objectives, weather, scoring, debriefs.
+- `game/js/aircraft.js` — the flight model and the three airframes: throttle, coordinated turns, stall, wind and gusts, fuel, damage, landing and crash judgement.
+- `game/js/missions.js` — the seven sorties and free flight: objectives, weather, scoring, debriefs — and the rival pilot of the air race.
 - `game/js/traffic.js` — the other mail plane on its all-day circuit.
 - `game/js/autopilot.js` — the demo hold that flies the menus.
 - `game/js/pilotlog.js` — the session log book behind the campaign board.
